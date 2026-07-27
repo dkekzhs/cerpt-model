@@ -1,0 +1,15 @@
+{
+  "seed": 42,
+  "train": 4000,
+  "validation": 500,
+  "test": 500,
+  "adversarial": 256,
+  "operators": [
+    "EXTRACT",
+    "BIND",
+    "COMPARE",
+    "SIMULATE",
+    "CHECK",
+    "WRITE_RESULT"
+  ]
+}
