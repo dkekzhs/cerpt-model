@@ -49,7 +49,10 @@ python scripts/train.py `
 
 ## 실제 학습 기록
 
-- 2026-07-28: CPU에서 1~3 epoch 완료
+- 2026-07-28: CPU에서 Epoch 1~3 완료
 - Epoch 3 validation loss: `2.1737`
-- 실행 도구의 foreground 제한으로 중단된 뒤, Epoch 3 checkpoint에서 `--resume-from`으로 4~30 epoch를 백그라운드 재개
-- 백그라운드 로그: `artifacts/cerpt-korean-stage1/training_resume.log`
+- Epoch 3 checkpoint에서 재개하여 Epoch 4~6 완료
+- Epoch 6 train loss: `1.6066`
+- Epoch 6 validation loss: `1.7302`
+- 사용자 요청으로 Epoch 6 checkpoint 저장 직후 학습 중지
+- 현재 checkpoint: `artifacts/cerpt-korean-stage1-resumed`
