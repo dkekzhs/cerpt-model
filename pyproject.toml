@@ -13,6 +13,7 @@ dependencies = [
   "tokenizers>=0.15",
   "huggingface_hub>=0.23",
   "Pillow>=10.0",
+  "datasets>=3.0",
 ]
 
 [tool.setuptools.packages.find]
