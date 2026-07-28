@@ -2,7 +2,7 @@
 language:
 - ko
 library_name: transformers
-pipeline_tag: text2text-generation
+pipeline_tag: text-generation
 tags:
 - pytorch
 - cerpt
