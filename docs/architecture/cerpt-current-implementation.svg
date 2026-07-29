@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="650" viewBox="0 0 1300 650" role="img" aria-labelledby="title desc">
+  <title id="title">Current CERPT causal implementation</title>
+  <desc id="desc">The current from-scratch decoder-only CERPT scaffold in PyTorch.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker>
+    <style>
+      .box { fill:#eff6ff; stroke:#2563eb; stroke-width:2; rx:14; }
+      .head { fill:#fff7ed; stroke:#ea580c; stroke-width:2; rx:14; }
+      .label { font:700 18px Arial,sans-serif; fill:#0f172a; text-anchor:middle; }
+      .small { font:14px Arial,sans-serif; fill:#334155; text-anchor:middle; }
+      .arrow { stroke:#334155; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .loop { stroke:#2563eb; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1300" height="650" fill="#fff"/>
+  <text x="50" y="50" font-family="Arial" font-size="28" font-weight="700" fill="#0f172a">Current CERPT causal scaffold</text>
+  <text x="50" y="78" font-family="Arial" font-size="14" fill="#475569">Implemented path in src/cerpt/models/cerpt_causal.py — auditable scaffold, not yet the full target controller.</text>
+  <rect x="50" y="180" width="190" height="100" class="box"/>
+  <text x="145" y="216" class="label">input_ids</text><text x="145" y="245" class="small">token + position embeddings</text>
+  <rect x="300" y="150" width="260" height="160" class="box"/>
+  <text x="430" y="190" class="label">causal decoder</text><text x="430" y="220" class="small">N TransformerEncoder layers</text><text x="430" y="245" class="small">upper-triangular causal mask</text><text x="430" y="270" class="small">gradient checkpointing option</text>
+  <rect x="620" y="150" width="270" height="160" class="box"/>
+  <text x="755" y="190" class="label">workspace loop</text><text x="755" y="220" class="small">learned workspace seed</text><text x="755" y="245" class="small">evidence = mean token state</text><text x="755" y="270" class="small">shared transition core × cycles</text>
+  <path d="M240 230 H300" class="arrow"/><path d="M560 230 H620" class="arrow"/>
+  <path d="M890 230 C960 230 960 125 890 125" class="loop"/><text x="962" y="177" font-family="Arial" font-size="13" fill="#2563eb">reuse same core</text>
+  <rect x="950" y="150" width="270" height="160" class="head"/>
+  <text x="1085" y="190" class="label">inspectable outputs</text><text x="1085" y="220" class="small">workspace tensor</text><text x="1085" y="245" class="small">operator logits per cycle</text><text x="1085" y="270" class="small">cycle-validity logits</text>
+  <path d="M890 230 H950" class="arrow"/>
+  <rect x="300" y="400" width="260" height="100" class="head"/>
+  <text x="430" y="437" class="label">LM head</text><text x="430" y="466" class="small">next-token logits</text>
+  <rect x="620" y="400" width="270" height="100" class="head"/>
+  <text x="755" y="437" class="label">training objective</text><text x="755" y="466" class="small">causal LM + optional aux losses</text>
+  <rect x="950" y="400" width="270" height="100" class="box"/>
+  <text x="1085" y="437" class="label">generate()</text><text x="1085" y="466" class="small">greedy, full recompute per token</text>
+  <path d="M430 310 V400" class="arrow"/><path d="M755 310 V400" class="arrow"/><path d="M890 450 H950" class="arrow"/>
+  <text x="50" y="590" font-family="Arial" font-size="14" fill="#b45309">Not yet implemented: dynamic operator execution, typed slot read/write masks, commit/rollback, KV cache, vLLM backend, and trained multimodal fusion.</text>
+</svg>

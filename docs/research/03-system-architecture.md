@@ -1,5 +1,12 @@
 # 03. 시스템 아키텍처
 
+README에서 바로 볼 수 있는 아키텍처 그림은 다음 두 개로 나뉜다.
+
+- [CERPT 연구 목표 구조](../architecture/cerpt-target-architecture.svg)
+- [현재 causal PyTorch 구현](../architecture/cerpt-current-implementation.svg)
+
+두 그림을 분리한 이유는 중요하다. 아래의 일곱 모듈은 최종 연구 목표이고, 현재 `CERPTForCausalLM`은 decoder, workspace seed, shared transition core, operator/verifier heads까지 구현한 scaffold다. 동적 operator 실행, typed slot read/write, certification에 따른 commit/rollback, resource scheduler는 추가 구현과 실험이 필요하다.
+
 ## 1. 전체 구성
 
 CERPT는 다음 일곱 모듈로 구성한다.

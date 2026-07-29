@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">CERPT target architecture</title>
+  <desc id="desc">A decoder-only causal language backbone connected to a persistent typed workspace, recursive transition cycles, an operator program controller, evidence certification, and a normal answer decoder.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#2563eb"/></marker>
+    <style>
+      .box { stroke-width: 2; rx: 16; }
+      .current { fill: #eff6ff; stroke: #2563eb; }
+      .target { fill: #f8fafc; stroke: #64748b; stroke-dasharray: 8 6; }
+      .cert { fill: #ecfdf5; stroke: #059669; }
+      .side { fill: #fff7ed; stroke: #ea580c; }
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 18px Arial, sans-serif; fill: #0f172a; text-anchor: middle; }
+      .small { font: 14px Arial, sans-serif; fill: #334155; text-anchor: middle; }
+      .tiny { font: 13px Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #334155; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .blue-arrow { stroke: #2563eb; stroke-width: 2.5; fill: none; marker-end: url(#arrowBlue); }
+      .loop { stroke: #2563eb; stroke-width: 2.5; fill: none; marker-end: url(#arrowBlue); }
+    </style>
+  </defs>
+
+  <rect width="1400" height="900" fill="#ffffff"/>
+  <text x="52" y="56" class="title">CERPT — Causal Evidence Recursive Program Transformer</text>
+  <text x="52" y="84" class="tiny">Target architecture: causal token generation is augmented by an inspectable typed workspace and evidence-certified recursive state transitions.</text>
+
+  <rect x="52" y="145" width="190" height="104" class="box current"/>
+  <text x="147" y="178" class="label">Input</text>
+  <text x="147" y="204" class="small">text / image / video</text>
+  <text x="147" y="226" class="small">optional tools &amp; memory</text>
+
+  <rect x="282" y="145" width="190" height="104" class="box current"/>
+  <text x="377" y="178" class="label">Input adapters</text>
+  <text x="377" y="204" class="small">tokenizer</text>
+  <text x="377" y="226" class="small">vision / temporal encoders</text>
+
+  <rect x="512" y="125" width="290" height="144" class="box current"/>
+  <text x="657" y="164" class="label">Decoder-only backbone</text>
+  <text x="657" y="192" class="small">causal self-attention</text>
+  <text x="657" y="214" class="small">residual stream + LM head</text>
+  <text x="657" y="240" class="small">next-token prediction</text>
+
+  <path d="M242 197 H282" class="arrow"/>
+  <path d="M472 197 H512" class="arrow"/>
+
+  <rect x="865" y="115" width="250" height="92" class="box side"/>
+  <text x="990" y="148" class="label">Program controller</text>
+  <text x="990" y="174" class="small">operator / read-write / halt</text>
+  <text x="990" y="194" class="small">branch &amp; verification budget</text>
+  <path d="M802 177 H865" class="blue-arrow"/>
+
+  <rect x="52" y="350" width="410" height="270" class="box current"/>
+  <text x="257" y="386" class="label">Persistent typed workspace</text>
+  <text x="257" y="414" class="small">state that survives reasoning cycles</text>
+  <rect x="80" y="445" width="156" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="158" y="470" class="small">Goal / Constraint</text>
+  <rect x="258" y="445" width="176" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="346" y="470" class="small">Fact / Evidence</text>
+  <rect x="80" y="500" width="156" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="158" y="525" class="small">Hypothesis</text>
+  <rect x="258" y="500" width="176" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="346" y="525" class="small">Result / Answer draft</text>
+  <text x="257" y="579" class="small">typed slots: value, source, confidence, validity</text>
+  <path d="M657 269 C657 320 385 305 385 350" class="blue-arrow"/>
+
+  <rect x="865" y="255" width="250" height="112" class="box target"/>
+  <text x="990" y="288" class="label">Operator bank</text>
+  <text x="990" y="315" class="small">EXTRACT · BIND · COMPOSE</text>
+  <text x="990" y="337" class="small">SIMULATE · CHECK · BRANCH</text>
+  <text x="990" y="359" class="small">MERGE · INVALIDATE · HALT</text>
+  <path d="M990 207 V255" class="arrow"/>
+
+  <rect x="540" y="350" width="350" height="270" class="box current"/>
+  <text x="715" y="387" class="label">Recursive transition cycle</text>
+  <text x="715" y="414" class="small">shared transition core, reused each cycle</text>
+  <rect x="582" y="450" width="266" height="56" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="715" y="475" class="label">workspace + evidence + operator</text>
+  <text x="715" y="495" class="small">→ proposed state / evidence / draft</text>
+  <path d="M462 485 H540" class="blue-arrow"/>
+  <path d="M890 485 C970 485 970 405 890 405" class="loop"/>
+  <text x="944" y="452" class="tiny">repeat / adapt depth</text>
+  <path d="M865 311 H840 C820 311 820 350 820 350" class="arrow"/>
+
+  <rect x="540" y="690" width="350" height="130" class="box cert"/>
+  <text x="715" y="726" class="label">Evidence certification</text>
+  <text x="715" y="754" class="small">neural verifier + deterministic checker</text>
+  <text x="715" y="776" class="small">causal utility / contradiction / grounding</text>
+  <text x="715" y="798" class="small">accept commit · reject rollback · branch</text>
+  <path d="M715 620 V690" class="blue-arrow"/>
+
+  <rect x="1030" y="690" width="280" height="130" class="box current"/>
+  <text x="1170" y="726" class="label">Output</text>
+  <text x="1170" y="754" class="small">answer tokens</text>
+  <text x="1170" y="776" class="small">workspace / trace audit</text>
+  <text x="1170" y="798" class="small">optional tool action</text>
+  <path d="M890 755 H1030" class="arrow"/>
+  <path d="M802 197 C1120 197 1170 520 1170 690" class="arrow"/>
+
+  <rect x="1030" y="405" width="280" height="90" class="box side"/>
+  <text x="1170" y="438" class="label">Inspectable heads</text>
+  <text x="1170" y="466" class="small">operator logits · cycle validity</text>
+  <path d="M890 485 H1030" class="arrow"/>
+  <path d="M1170 495 V690" class="arrow"/>
+
+  <rect x="52" y="730" width="410" height="90" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="75" y="753" width="26" height="20" class="box current"/>
+  <text x="115" y="768" class="tiny">현재 causal scaffold에 존재</text>
+  <rect x="75" y="785" width="26" height="20" class="box target"/>
+  <text x="115" y="800" class="tiny">연구 목표 / 추가 구현 필요</text>
+</svg>
