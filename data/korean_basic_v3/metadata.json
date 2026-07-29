@@ -1,0 +1,36 @@
+{
+  "stage": "korean_basic",
+  "seed": 123,
+  "target_format": "answer_only_short",
+  "deferred": [
+    "long_evidence_trace",
+    "rich_eos_serialization",
+    "complex_output_parser"
+  ],
+  "operators": [
+    "EXTRACT",
+    "BIND",
+    "COMPARE",
+    "SIMULATE",
+    "CHECK",
+    "WRITE_RESULT"
+  ],
+  "counts": {
+    "train": 9230,
+    "validation": 993,
+    "test": 777
+  },
+  "task_counts": {
+    "train": {
+      "korean_arithmetic": 6430,
+      "korean_daily_chat": 2800
+    },
+    "validation": {
+      "korean_arithmetic": 793,
+      "korean_daily_chat": 200
+    },
+    "test": {
+      "korean_arithmetic": 777
+    }
+  }
+}

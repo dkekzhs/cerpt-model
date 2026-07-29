@@ -1,0 +1,20 @@
+{
+  "model_type": "cerpt_causal",
+  "vocab_size": 32768,
+  "hidden_size": 3072,
+  "num_hidden_layers": 32,
+  "num_attention_heads": 24,
+  "intermediate_size": 8192,
+  "max_position_embeddings": 4096,
+  "workspace_slots": 16,
+  "num_cycles": 6,
+  "num_operators": 8,
+  "parameter_target": "approximately 3.12B with untied input/output embeddings",
+  "requires": [
+    "a real 32k multilingual/Korean tokenizer",
+    "distributed mixed-precision training",
+    "activation checkpointing",
+    "sharded optimizer and checkpointing",
+    "KV cache implementation before serving"
+  ]
+}

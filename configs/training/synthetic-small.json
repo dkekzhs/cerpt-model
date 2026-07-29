@@ -1,0 +1,11 @@
+{
+  "data_dir": "data/synthetic",
+  "output_dir": "artifacts/cerpt-small",
+  "epochs": 3,
+  "batch_size": 32,
+  "learning_rate": 0.0003,
+  "seed": 42,
+  "train_size": 4000,
+  "validation_size": 500,
+  "test_size": 500
+}

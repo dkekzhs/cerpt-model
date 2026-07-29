@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cerpt"
+version = "0.1.0"
+description = "Causal Evidence Recursive Program Transformer research PoC"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.1",
+  "transformers>=4.40",
+  "tokenizers>=0.15",
+  "huggingface_hub>=0.23",
+  "Pillow>=10.0",
+  "datasets>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
