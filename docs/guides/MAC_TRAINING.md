@@ -33,5 +33,7 @@ Finder에서 `scripts/train_mac.command`를 더블클릭한다.
 - MPS fallback은 지원되지 않는 연산에만 CPU를 사용하도록 설정한다.
 - gradient accumulation과 gradient checkpointing을 켠다.
 - 기본 SFT는 현재 검증된 checkpoint를 별도 output directory에 저장한다.
+- 로컬에 Base checkpoint가 없으면 Hugging Face `qweqwqw113/cerpt-causal-korean-v5-10`에서 자동으로 불러온다.
+- 256GB 통합 메모리를 활용해 호환성 우선으로 기본 precision은 fp32다.
 
 현재 구현은 Mac에서 MPS 동작을 코드 수준으로 검증했지만, 실제 M4 Pro 하드웨어 테스트는 해당 Mac에서 처음 실행해야 한다.

@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--tokenizer-dir", default=None)
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--resume-from", default=None)
     args = parser.parse_args()
     device = select_device("mps")
     project = Path(__file__).resolve().parents[1]
@@ -27,13 +28,15 @@ def main() -> None:
     environment.setdefault("TOKENIZERS_PARALLELISM", "false")
 
     if args.mode == "sft":
+        local_base = project / "artifacts" / "cerpt-causal-korean-v5-10"
+        base_model = args.resume_from or (str(local_base) if local_base.exists() else "qweqwqw113/cerpt-causal-korean-v5-10")
         command = [
             python, str(project / "scripts" / "sft_causal.py"),
-            "--resume-from", str(project / "artifacts" / "cerpt-causal-korean-v5-10"),
+            "--resume-from", base_model,
             "--data-dir", args.data_dir or str(project / "data" / "korean_basic_v6"),
             "--output-dir", args.output_dir or str(project / "artifacts" / "cerpt-causal-korean-v6-sft-mps"),
             "--epochs", str(args.epochs or 5), "--batch-size", "64",
-            "--max-length", "96", "--device", "mps", "--precision", "fp16",
+            "--max-length", "96", "--device", "mps", "--precision", "fp32",
             "--gradient-accumulation-steps", "4", "--gradient-checkpointing",
         ]
     else:
@@ -46,7 +49,7 @@ def main() -> None:
             "--data-dir", args.data_dir or str(project / "data" / "pretraining_shards"),
             "--output-dir", args.output_dir or str(project / "artifacts" / "cerpt-causal-3b-mps"),
             "--epochs", str(args.epochs or 1), "--batch-size", "1",
-            "--device", "mps", "--precision", "fp16",
+            "--device", "mps", "--precision", "fp32",
             "--gradient-accumulation-steps", "32", "--gradient-checkpointing",
         ]
     print("Using Apple Silicon device:", device)
