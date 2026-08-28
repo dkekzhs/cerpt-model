@@ -1,34 +1,118 @@
 # Decoder-only CERPT Base
 
-## 목적
+## 현재 구현
 
-기존 `CERPTForConditionalGeneration`은 입력과 정답 trace를 나눠 학습하는 Encoder–Decoder PoC다. 따라서 일반적인 Base LLM처럼 다음 토큰을 계속 예측하는 모델과는 다르다.
+`CERPTForCausalLM`은 이제 Hugging Face `LlamaForCausalLM`과 같은 decoder core를 사용한다.
 
-`CERPTForCausalLM`은 이 문제를 분리하기 위한 새 골격이다.
+- RoPE positional encoding
+- RMSNorm
+- SwiGLU MLP
+- grouped-query attention(GQA)
+- 표준 autoregressive causal mask
+- Hugging Face KV cache와 generation
+- response-only causal LM loss
+- 인과적 in-stream CERPT workspace token
+- cycle별 operator/verifier 보조 head
+- `save_pretrained`/`from_pretrained`
 
-- decoder-only causal Transformer
-- next-token language-model loss
-- decoder hidden state에서 CERPT typed workspace 생성
-- cycle별 operator prediction
-- cycle별 verifier prediction
-- workspace summary를 decoder 출력에 다시 주입
-- `save_pretrained`/`from_pretrained` 형식 저장
+핵심 코드는 [src/cerpt/models/cerpt_causal.py](../../src/cerpt/models/cerpt_causal.py), sequence formatter는 [src/cerpt/data/causal.py](../../src/cerpt/data/causal.py), 학습기는 [scripts/train_causal.py](../../scripts/train_causal.py), 실행기는 [scripts/chat_causal.py](../../scripts/chat_causal.py)다.
 
-핵심 코드는 [src/cerpt/models/cerpt_causal.py](../../src/cerpt/models/cerpt_causal.py)이고, 학습기는 [scripts/train_causal.py](../../scripts/train_causal.py), 실행기는 [scripts/chat_causal.py](../../scripts/chat_causal.py)다.
+## 왜 구조를 바꿨나
 
-## 현재 상태
+이전 구현은 causal decoder 뒤에서 전체 sequence hidden을 평균내 workspace를 만들고 그 결과를 모든 token 위치에 더했다. 그 때문에 미래 response와 masked padding이 과거 logit을 바꿨다. 누수 전 decoder hidden은 정상적이었으므로 문제는 workspace 결합에 있었다.
 
-현재 구현은 “CERPT 구조를 가진 작은 Base 모델을 처음부터 학습할 수 있는 골격”이다. `data/korean_basic_v2`로는 한국어 산수·일상 대화 중심의 smoke pretraining을 할 수 있지만, 이것만으로 범용 LLM이 되었다고 주장할 수 없다.
+수정 전 재현값:
 
-3B급 확장 목표는 [configs/cerpt-causal-3b.json](../../configs/cerpt-causal-3b.json)에 정의했다. 현재 구조 기준으로 hidden 3072, 32 layers, FFN 8192, 24 heads, 32k vocabulary를 사용하며 약 3.12B parameters다. 파라미터 수만 확인하려면 다음 명령을 실행한다.
+```text
+decoder before workspace: max prefix hidden difference 0.000000
+random initialization: max prefix-logit difference 0.001315
+trained v6 SFT checkpoint: max prefix-logit difference 3.535420
+same real tokens, padding length 4 → 8: max real-token logit difference 6.008883
+```
+
+따라서 dense global workspace와 shared transition core를 causal 모델에서 제거했다. 수정 전 base/SFT checkpoint와 기록 loss는 폐기 대상이며 새 구조로 처음부터 학습해야 한다.
+
+## 새 causal workspace
+
+학습 sequence는 다음처럼 구성한다.
+
+```text
+[BOS]
+prompt tokens
+workspace cycle 0 / slot 0 ... slot N
+workspace cycle 1 / slot 0 ... slot N
+...
+response tokens
+[EOS]
+```
+
+workspace는 별도 full-sequence tensor를 만들지 않는다. 각각의 workspace token은 같은 causal decoder를 통과하면서 앞선 prompt와 workspace token만 볼 수 있다. response token은 모든 workspace token을 볼 수 있으므로 workspace가 생성에 실제 memory로 참여한다. 학습 loss는 prompt와 workspace 위치를 `-100`으로 mask하고 response와 EOS에만 적용한다.
+
+모델은 workspace token의 최종 hidden을 `[batch, cycle, slot, hidden]`으로 추출한다. cycle 안의 slot 평균에서 operator logits와 validity logits를 계산한다. 이 head들은 현재 보조 감독과 관찰용이다. operator가 다른 함수를 실행하거나 verifier가 state를 commit/rollback하는 단계는 아직 구현되지 않았다.
+
+## 회귀 계약
+
+[tests/test_causal.py](../../tests/test_causal.py)와 [tests/test_causal_data.py](../../tests/test_causal_data.py)가 다음 경계를 고정한다.
+
+- 미래 suffix를 바꿔도 동일 prefix logits는 변하지 않는다.
+- masked right padding을 추가해도 real-token logits는 변하지 않는다.
+- KV cache로 한 token씩 계산한 logit과 full-prefix logit이 일치한다.
+- workspace token은 prompt 뒤, response 앞에 빠짐없이 순서대로 배치된다.
+- prompt와 workspace에는 LM loss를 주지 않고 response만 학습한다.
+- 긴 prompt는 앞부분을 버리되 모든 workspace token을 보존한다.
+
+## 3B preset
+
+[configs/cerpt-causal-3b.json](../../configs/cerpt-causal-3b.json)은 다음 구조다.
+
+| 항목 | 값 |
+|---|---:|
+| vocabulary | 32,768, workspace token 96개 포함 |
+| hidden | 3,072 |
+| decoder layers | 28 |
+| query heads | 24 |
+| KV heads | 8 |
+| head dimension | 128 |
+| SwiGLU intermediate | 8,192 |
+| context | 4,096 |
+| workspace | 6 cycles × 16 slots |
+| embeddings | input/output untied |
+| parameters | 3,020,101,641 |
+| FP16 weights | 약 5.63 GiB |
 
 ```powershell
 python scripts/estimate_causal_params.py --config configs/cerpt-causal-3b.json
 ```
 
-3B 학습은 현재 8GB GPU에서 실행하지 않는다. 실제 학습에는 32k tokenizer, 대규모 corpus, distributed mixed precision, activation checkpointing, sharded optimizer가 필요하다.
+이 수치는 실제 Llama/GQA projection shape, SwiGLU 3개 projection, RMSNorm, LM head, CERPT auxiliary head를 센 값이다. 3B weight가 이미 학습되었다는 뜻은 아니다.
 
-대형 학습 서버에서는 다음처럼 preset을 적용한다. 아래 명령은 구조 연결 예시이며, 현재 PC에서 실행하지 않는다.
+## 새 학습 데이터 경계
+
+현재 확인한 후보 원천은 다음과 같다.
+
+| 원천 | 규모 | 비고 |
+|---|---:|---|
+| `data/korean_basic_v6` | 11,000 | 산수 8,000 + 일상 대화 3,000 |
+| `songys/Chatbot_data` | 11,876 | 일상/이별/사랑 인공 문답, MIT 저장소 |
+| 로컬 오피스 대화 ZIP | 46,414 | daily/email/schedule/meeting, 4개 JSON |
+| 합계 | 69,290 | 중복 제거 전 |
+
+이 데이터는 대화 특화 학습과 pipeline 검증에는 쓸 수 있지만 3B 범용 base를 충분히 학습시키는 corpus는 아니다. 특히 Chatbot_data는 감정 도메인 분포가 명시되어 있고 오피스 데이터는 업무 도메인에 집중되어 있어, “편향이 없다”고 가정하면 안 된다. source별 sampling weight, 중복/near-duplicate 제거, train/validation/test의 prompt-group 분리, 개인정보 검사, 독성·성별·지역·연령 평가가 먼저 필요하다. 로컬 ZIP은 재배포 전에 원출처와 라이선스를 확정한다.
+
+## 학습과 서빙
+
+소형 구조 smoke 학습:
+
+```powershell
+python scripts/train_causal.py `
+  --data-dir data/korean_basic_v6 `
+  --output-dir artifacts/cerpt-causal-korean-v7-base `
+  --epochs 1 `
+  --batch-size 16 `
+  --max-length 128
+```
+
+3B 학습 서버용 구조 연결 예시:
 
 ```powershell
 python scripts/train_causal.py `
@@ -37,34 +121,10 @@ python scripts/train_causal.py `
   --data-dir data/pretraining_shards `
   --output-dir artifacts/cerpt-causal-3b `
   --batch-size 1 `
-  --epochs 1
+  --epochs 1 `
+  --gradient-checkpointing
 ```
 
-특히 아래 항목은 아직 후속 단계다.
+32k tokenizer에는 96개 workspace special token이 최종 vocabulary 안에 예약되어 있어야 한다. `train_causal.py`가 token을 등록한 뒤 tokenizer 크기와 preset의 `vocab_size`가 다르면 학습을 중단한다.
 
-- 실제 KV cache
-- distributed/mixed-precision 대규모 사전학습
-- packed web/code/multilingual corpus
-- vLLM custom model adapter와 attention backend
-- 검증기 negative sample 및 causal utility ablation
-
-따라서 지금은 PyTorch에서 구조와 손실을 검증하는 단계이며, vLLM 호환 모델로 공개하는 단계는 아니다.
-
-## 실행
-
-```powershell
-python scripts/train_causal.py `
-  --data-dir data/korean_basic_v2 `
-  --output-dir artifacts/cerpt-causal-korean-base `
-  --epochs 3 `
-  --batch-size 16 `
-  --max-length 128
-```
-
-```powershell
-python scripts/chat_causal.py `
-  --model-dir artifacts/cerpt-causal-korean-base `
-  --question "안녕"
-```
-
-한국어 산수 입력은 현재 결정론적 verifier가 먼저 계산해 정답을 확인한다. 이는 작은 모델의 생성 품질을 과장하지 않고 CERPT의 검증 경로를 따로 측정하기 위한 것이다.
+KV cache는 구현되었고 core parameter naming은 Llama 계열을 따른다. 남은 production serving 작업은 `cerpt_causal` config 등록/패키징, vLLM 실제 load·continuous batching 검증, GGUF converter와 Ollama/llama.cpp template, FlashAttention, FSDP/DeepSpeed다.

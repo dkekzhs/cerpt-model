@@ -9,6 +9,7 @@ from transformers import PreTrainedTokenizerFast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from cerpt.data.causal import CausalBatchFormatter
 from cerpt.models.cerpt_causal import CERPTForCausalLM
 from cerpt.verification.arithmetic import calculate_korean_arithmetic
 from cerpt.utils.device import select_device
@@ -25,6 +26,11 @@ def main() -> None:
     model_dir = Path(args.model_dir)
     tokenizer = PreTrainedTokenizerFast.from_pretrained(model_dir)
     model = CERPTForCausalLM.from_pretrained(model_dir)
+    formatter = CausalBatchFormatter(
+        tokenizer,
+        tuple(model.config.workspace_token_ids),
+        model.config.max_position_embeddings,
+    )
     device = select_device(args.device)
     model.to(device).eval()
     print(f"CERPT causal loaded on {device}. Type 'exit' to quit.")
@@ -40,7 +46,7 @@ def main() -> None:
             print("CERPT verifier: deterministic arithmetic", "→".join(verified["trace"]))
             continue
         prompt = f"[TASK_CHAT] 다음 질문에 답하세요. {question}\n"
-        encoded = tokenizer(prompt, return_tensors="pt")
+        encoded = formatter.encode_prompts([prompt])
         encoded = {key: value.to(device) for key, value in encoded.items()}
         with torch.no_grad():
             generated = model.generate(**encoded, max_new_tokens=args.max_new_tokens, eos_token_id=tokenizer.eos_token_id)

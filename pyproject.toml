@@ -8,12 +8,14 @@ version = "0.1.0"
 description = "Causal Evidence Recursive Program Transformer research PoC"
 requires-python = ">=3.10"
 dependencies = [
-  "torch>=2.1",
-  "transformers>=4.40",
-  "tokenizers>=0.15",
-  "huggingface_hub>=0.23",
-  "Pillow>=10.0",
-  "datasets>=3.0",
+  "torch==2.11.0",
+  "transformers==5.7.0",
+  "tokenizers==0.22.2",
+  "huggingface_hub==1.24.0",
+  "Pillow==10.4.0",
+  "datasets==5.0.0",
+  "accelerate==1.14.0",
+  "pydantic==2.11.4",
 ]
 
 [tool.setuptools.packages.find]

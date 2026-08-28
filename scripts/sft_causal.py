@@ -4,6 +4,7 @@ import argparse
 import json
 import random
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -12,11 +13,28 @@ from transformers import PreTrainedTokenizerFast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from cerpt.data.causal import CausalBatchFormatter, ConversationRow
 from cerpt.models.cerpt_causal import CERPTForCausalLM
 from cerpt.utils.device import autocast_context, select_device
 
 
-class JsonlDataset(Dataset):
+class SFTTrainingRow(ConversationRow):
+    task_type: str
+
+
+@dataclass(frozen=True, slots=True)
+class MissingSFTLossError(RuntimeError):
+    def __str__(self) -> str:
+        return "SFT model did not return a training loss"
+
+
+@dataclass(frozen=True, slots=True)
+class EmptySFTSplitError(ValueError):
+    def __str__(self) -> str:
+        return "SFT requires non-empty train and validation chat splits"
+
+
+class JsonlDataset(Dataset[SFTTrainingRow]):
     def __init__(self, path: Path, task_type: str):
         with path.open(encoding="utf-8") as handle:
             self.rows = [json.loads(line) for line in handle if line.strip() and json.loads(line).get("task_type") == task_type]
@@ -24,28 +42,8 @@ class JsonlDataset(Dataset):
     def __len__(self) -> int:
         return len(self.rows)
 
-    def __getitem__(self, index: int) -> dict:
+    def __getitem__(self, index: int) -> SFTTrainingRow:
         return self.rows[index]
-
-
-def make_collator(tokenizer, max_length: int):
-    def collate(rows: list[dict]) -> dict[str, torch.Tensor]:
-        prompts = [f"{row['input_text']}\n" for row in rows]
-        texts = [f"{prompt}{row['target_text']} [EOS]" for prompt, row in zip(prompts, rows)]
-        encoded = tokenizer(texts, padding=True, truncation=True, max_length=max_length, return_tensors="pt", add_special_tokens=False)
-        labels = encoded["input_ids"].clone().masked_fill(encoded["attention_mask"].eq(0), -100)
-        prompt_lengths = [len(tokenizer(prompt, add_special_tokens=False)["input_ids"]) for prompt in prompts]
-        for index, prompt_length in enumerate(prompt_lengths):
-            labels[index, : min(prompt_length, max_length)] = -100
-        if not (labels != -100).any(dim=1).all():
-            raise ValueError("SFT batch contains a response truncated away; increase --max-length")
-        return {
-            "input_ids": encoded["input_ids"],
-            "attention_mask": encoded["attention_mask"],
-            "labels": labels,
-        }
-
-    return collate
 
 
 def seed_everything(seed: int) -> None:
@@ -66,7 +64,7 @@ def run_epoch(model, loader, optimizer, device, train: bool, precision: str, gra
         with torch.set_grad_enabled(train), autocast_context(device, precision):
             output = model(**batch)
             if output.loss is None:
-                raise RuntimeError("SFT model did not return a loss")
+                raise MissingSFTLossError
             if train:
                 (output.loss / gradient_accumulation_steps).backward()
                 if (step + 1) % gradient_accumulation_steps == 0 or step + 1 == len(loader):
@@ -102,13 +100,15 @@ def main() -> None:
     train_set = JsonlDataset(data_dir / "train.jsonl", "korean_daily_chat")
     valid_set = JsonlDataset(data_dir / "validation.jsonl", "korean_daily_chat")
     if not train_set or not valid_set:
-        raise ValueError("SFT requires non-empty train and validation chat splits")
+        raise EmptySFTSplitError
 
     tokenizer = PreTrainedTokenizerFast.from_pretrained(args.resume_from)
-    collator = make_collator(tokenizer, args.max_length)
+    model = CERPTForCausalLM.from_pretrained(args.resume_from)
+    max_length = min(args.max_length, model.config.max_position_embeddings)
+    formatter = CausalBatchFormatter(tokenizer, tuple(model.config.workspace_token_ids), max_length)
+    collator = formatter.collate
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collator)
     valid_loader = DataLoader(valid_set, batch_size=args.batch_size, shuffle=False, collate_fn=collator)
-    model = CERPTForCausalLM.from_pretrained(args.resume_from)
     if args.gradient_checkpointing:
         model.enable_gradient_checkpointing()
     device = select_device(args.device)

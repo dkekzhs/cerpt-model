@@ -10,17 +10,19 @@ def estimate(config: dict) -> int:
     intermediate = int(config.get("intermediate_size") or hidden * 4)
     layers = int(config["num_hidden_layers"])
     vocab = int(config["vocab_size"])
-    max_positions = int(config["max_position_embeddings"])
-    slots = int(config.get("workspace_slots", 8))
+    attention_heads = int(config["num_attention_heads"])
+    key_value_heads = int(config.get("num_key_value_heads") or attention_heads)
+    head_dim = int(config.get("head_dim") or hidden // attention_heads)
     operators = int(config.get("num_operators", 8))
-    transformer_layer = 4 * hidden * hidden + 2 * hidden * intermediate + 9 * hidden + intermediate
+    attention = 2 * hidden * head_dim * (attention_heads + key_value_heads)
+    feed_forward = 3 * hidden * intermediate
+    transformer_layer = attention + feed_forward + 2 * hidden
+    output_embeddings = 0 if config.get("tie_word_embeddings", False) else vocab * hidden
     return (
-        2 * vocab * hidden
-        + max_positions * hidden
+        vocab * hidden
+        + output_embeddings
         + layers * transformer_layer
-        + transformer_layer
-        + 2 * hidden
-        + slots * hidden
+        + hidden
         + hidden * operators + operators
         + hidden + 1
     )

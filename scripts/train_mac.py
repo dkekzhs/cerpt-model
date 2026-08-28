@@ -28,11 +28,11 @@ def main() -> None:
     environment.setdefault("TOKENIZERS_PARALLELISM", "false")
 
     if args.mode == "sft":
-        local_base = project / "artifacts" / "cerpt-causal-korean-v5-10"
-        base_model = args.resume_from or (str(local_base) if local_base.exists() else "qweqwqw113/cerpt-causal-korean-v5-10")
+        if not args.resume_from:
+            raise SystemExit("sft mode requires --resume-from with a checkpoint trained by the new causal architecture")
         command = [
             python, str(project / "scripts" / "sft_causal.py"),
-            "--resume-from", base_model,
+            "--resume-from", args.resume_from,
             "--data-dir", args.data_dir or str(project / "data" / "korean_basic_v6"),
             "--output-dir", args.output_dir or str(project / "artifacts" / "cerpt-causal-korean-v6-sft-mps"),
             "--epochs", str(args.epochs or 5), "--batch-size", "64",

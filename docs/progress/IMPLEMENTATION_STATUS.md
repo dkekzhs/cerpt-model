@@ -16,6 +16,8 @@
 | 7. Decoder-only CERPT Base 골격 | 완료 | `src/cerpt/models/cerpt_causal.py`, `scripts/train_causal.py`, `scripts/chat_causal.py` |
 | 8. 문서 구조 정리 | 완료 | `docs/research`, `docs/guides`, `docs/data`, `docs/model-cards`, `docs/progress` |
 | 9. 한국어 데이터 품질 감사 | 완료 | `data/korean_basic_v5`, `scripts/audit_korean_basic.py` |
+| 10. Causal 무결성 재설계 | 완료 | Llama core, in-stream workspace token, response-only loss, KV cache, causality/padding/cache tests |
+| 11. 무료 GPU 3B 실행 경로 | 구현·로컬 관통 검증 완료, 실GPU 학습 대기 | 한국어 3-source 62,095쌍 변환, exact 32k BPE, Lightning/Colab T4 profile, Drive notebook, step checkpoint 자동 재개, 완료-marker 업로드 gate |
 
 ## 현재 구현 범위
 
@@ -23,12 +25,15 @@
 - 각 샘플에 자연어 문제, 구조화된 trace, operator labels, cycle validity labels, answer 저장
 - offline-friendly Hugging Face `PreTrainedTokenizerFast`
 - PyTorch encoder-decoder backbone
-- typed workspace seed와 slot type embedding
+- legacy Encoder–Decoder PoC의 typed workspace seed와 slot type embedding
 - 공유 transition core를 `num_cycles`번 재사용
-- cycle별 operator prediction 및 learned verification/commit gate
-- causal decoder와 `save_pretrained`/`from_pretrained` 호환 checkpoint
+- legacy Encoder–Decoder PoC의 cycle별 operator prediction 및 learned verification/commit gate
+- causal 모델의 prompt→workspace-token→response 흐름, operator/verifier prediction head와 `save_pretrained`/`from_pretrained` 호환 checkpoint
+- RoPE, RMSNorm, SwiGLU, GQA, Hugging Face KV cache
 - generation, exact-match 평가, commit gate 평균 기록
 - 대화형 추론 CLI: `scripts/chat.py`
+
+주의: causal workspace token은 응답이 attention하는 실제 memory이지만 operator/verifier head는 현재 보조 예측과 loss만 제공한다. operator가 실제 함수를 선택하지 않고 verifier가 update를 commit/rollback하지도 않는다. 이 동작은 legacy Encoder–Decoder PoC의 learned gate와 구분해야 한다.
 
 ## 1차 실행 결과
 
@@ -74,6 +79,8 @@ python scripts/upload_model.py --model-dir artifacts/cerpt-small --repo-id <HF_U
 현재 모델은 문서의 100M~300M 목표 모델이 아니라 구조 검증용 소형 PoC다. 데이터도 합성 알고리즘 과제에 한정되어 있으므로, 이 단계의 성능은 일반 언어 능력이나 CERPT의 최종 연구 주장을 의미하지 않는다. 다음 구현 단계는 identity perturbation, verifier negative-sample 학습, Dense/recursive baseline 비교다.
 
 ## Decoder-only smoke 결과
+
+아래 수치는 수정 전 full-sequence workspace 누수 구조에서 기록된 역사적 결과라 정상 autoregressive 성능 지표로 사용할 수 없다. 해당 checkpoint를 이어 학습하지 않는다.
 
 - 데이터: `data/korean_basic_v2`
 - 설정: hidden 64, 1 layer, batch 512, 1 epoch, CPU

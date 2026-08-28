@@ -8,6 +8,8 @@ CERPT는 **decoder-only causal language model**에 **persistent typed workspace*
 
 > 이 저장소는 완성된 범용 LLM이 아니라 CERPT 가설을 검증하기 위한 공개 연구 프로토타입입니다. 현재 checkpoint의 자연어 능력이나 CERPT의 우월성은 아직 입증되지 않았습니다.
 
+> **2026-08-27 causal integrity 수정:** 누수를 만들던 full-sequence workspace pooling을 제거하고 Llama 계열 causal decoder와 in-stream workspace token 구조로 교체했습니다. 접두사 인과성, padding 불변성, KV-cache/full-prefix 일치 테스트가 통과합니다. 다만 수정 전 학습한 모든 causal base/SFT checkpoint와 loss는 여전히 무효이며 새 구조로 처음부터 재학습해야 합니다.
+
 ## CERPT를 한 문장으로 설명하면
 
 **언어 모델이 생성하는 토큰 흐름 옆에 구조화된 작업 기억을 두고, 재사용 가능한 전이 core가 operator를 따라 상태를 갱신하며, evidence와 verifier가 검증한 결과만 답변 생성에 반영하는 causal Transformer입니다.**
@@ -30,43 +32,39 @@ CERPT는 **decoder-only causal language model**에 **persistent typed workspace*
 
 ```mermaid
 flowchart LR
-    I[입력 토큰] --> E[Token + Position Embedding]
-    E --> D[Decoder-only Causal Transformer]
-    D --> W[Persistent Typed Workspace]
-    W --> T[Shared Transition Core]
-    D --> T
-    T --> O[Operator / Verifier Heads]
-    T --> C[Evidence Certification]
-    C -->|commit| W
-    C -->|rollback / branch / retry| T
+    I[BOS + Prompt Tokens] --> W[Cycle × Slot Workspace Tokens]
+    W --> D[Llama-style Causal Decoder]
+    D --> O[Workspace Operator / Verifier Heads]
     D --> L[LM Head]
-    W --> L
     L --> A[Answer Tokens]
+    A -->|KV cache| D
 ```
 
 ### 핵심 모듈
 
 | 모듈 | 역할 | 현재 상태 |
 |---|---|---|
-| Token backbone | causal self-attention으로 이전 토큰을 보고 다음 토큰 표현을 계산 | 구현됨 |
-| Persistent typed workspace | Goal, Fact, Constraint, Evidence, Result 같은 슬롯을 reasoning cycle 사이에 유지 | 최소 workspace 구현됨 |
-| Shared transition core | workspace와 입력 evidence를 받아 상태를 반복 갱신 | 구현됨, 현재는 cycle마다 같은 core 재사용 |
+| Token backbone | RoPE, RMSNorm, SwiGLU, GQA를 사용하는 Llama 계열 causal decoder | 구현됨 |
+| Causal workspace | 프롬프트 뒤, 응답 앞에 cycle × slot 전용 token을 두고 뒤 토큰이 이를 attention | 구현됨; 의미론적 slot type과 read/write 규칙은 아직 없음 |
+| Recursive transition | 순서가 있는 workspace token들이 같은 decoder weight 안에서 앞선 workspace state를 읽음 | 인스트림 전이는 구현됨; 별도 동적 operator 실행은 연구 목표 |
 | Operator bank / controller | EXTRACT, BIND, SIMULATE, CHECK, BRANCH 등 상태 전이 프로그램을 선택 | head의 logits까지 구현; 동적 실행은 연구 목표 |
-| Evidence certification | 새 상태가 유효한지, 모순이 없는지, 실제 성능에 기여했는지 판정 | verifier head와 외부 deterministic verifier 일부 구현 |
-| Answer decoder | 최종 상태가 반영된 hidden에서 다음 토큰을 생성 | greedy `generate()` 구현 |
+| Evidence certification | 새 상태가 유효한지, 모순이 없는지, 실제 성능에 기여했는지 판정 | verifier logits와 외부 deterministic verifier 구현; causal 경로의 commit 제어는 아직 없음 |
+| Answer decoder | workspace token을 포함한 prefix에서 다음 토큰을 생성 | Hugging Face generation + KV cache 구현 |
 | Vision / video adapter | 이미지·비디오를 workspace에 넣을 수 있는 입력 경로 | encoder bridge 코드 존재; 학습·성능 검증 필요 |
 
 현재 `src/cerpt/models/cerpt_causal.py`에서 forward는 다음 순서로 동작합니다.
 
-1. 입력 토큰과 위치 embedding을 더합니다.
-2. causal mask가 적용된 decoder-only Transformer를 통과시킵니다.
-3. 학습된 workspace seed를 만들고, token hidden의 요약을 evidence로 사용합니다.
-4. 같은 `transition_core`를 `num_cycles`만큼 반복 적용합니다.
-5. cycle별 workspace에서 operator logits와 cycle-validity logits를 출력합니다.
-6. workspace summary를 token hidden에 더하고 LM head로 다음 토큰 확률을 계산합니다.
-7. 학습 시 causal LM loss에 operator·validity 보조 loss를 선택적으로 더합니다.
+1. formatter가 `[BOS] + prompt + cycle별 workspace slot token + response + [EOS]` 순서를 만듭니다.
+2. 모든 token을 하나의 Llama 계열 decoder가 엄격한 causal attention으로 처리합니다.
+3. 응답 token은 앞선 prompt와 workspace token을 볼 수 있지만 workspace token은 미래 응답을 볼 수 없습니다.
+4. 지정된 workspace token hidden을 `[batch, cycle, slot, hidden]`으로 추출합니다.
+5. cycle별 slot 평균에서 operator logits와 cycle-validity logits를 출력합니다.
+6. LM head는 표준 next-token logits를 계산하며, 학습 loss는 prompt/workspace를 제외한 response token에만 적용됩니다.
+7. 추론은 Hugging Face KV cache를 사용하고, chat formatter가 응답 전 workspace token을 자동으로 붙입니다.
 
-현재 구현은 **operator 이름을 예측하는 단계**까지이며, 예측된 operator가 실제 typed slot read/write와 rollback을 완전히 실행하는 단계는 아직 아닙니다. 이 차이가 현재 구현과 CERPT의 최종 연구 목표를 구분하는 핵심입니다.
+현재 구현은 **workspace token이 생성에 실제 attention memory로 참여하고 operator 이름과 cycle validity를 예측하는 단계**까지입니다. 예측된 operator가 다른 함수를 실행하거나 validity logits가 update를 accept/reject하지는 않습니다. 외부 deterministic 산수 verifier는 `chat_causal.py`의 별도 Python 경로이며 모델 내부 verifier head와 같은 기능이 아닙니다. 실제 typed slot read/write, evidence-conditioned commit, rollback은 아직 연구 목표입니다.
+
+모델 본체는 Llama state-dict layout과 Hugging Face KV cache를 사용합니다. 그러나 `model_type=cerpt_causal`의 vLLM 등록·패키징과 Ollama용 GGUF 변환은 아직 없으므로 두 런타임에서 바로 배포할 수 있다는 뜻은 아닙니다.
 
 ## CERPT가 검증하려는 가설
 
@@ -83,18 +81,20 @@ CERPT의 목적은 “workspace를 넣으면 자동으로 더 똑똑해진다”
 | 모델 | 설명 | 판정 |
 |---|---|---|
 | Legacy CERPT PoC | `CERPTForConditionalGeneration` 기반 encoder–decoder synthetic-task 구조 | 구조 실험용, 범용 LLM 아님 |
-| CERPT causal base | from-scratch decoder-only causal LM + workspace + transition core + inspectable heads | 현재 주력 scaffold |
-| CERPT Korean SFT | causal base에 한국어 일상 채팅 SFT를 적용한 소형 checkpoint | 동작 확인용, 대화 품질 제한적 |
-| CERPT 3B target | hidden 3072, 32 layers, 24 heads, FFN 8192, vocab 32768, context 4096 | 설정만 존재, 아직 학습되지 않음 |
+| CERPT causal base | Llama 계열 decoder + causal workspace tokens + inspectable heads | 새 학습용 현재 주력 구조 |
+| 기존 CERPT Korean SFT | 누수 구조로 학습한 소형 checkpoint | 폐기 대상; 새 구조와 호환되지 않음 |
+| CERPT 3B target | hidden 3072, 28 layers, 24 query / 8 KV heads, FFN 8192, vocab 32768, context 4096 | 설정과 재개 가능한 Lightning 학습 경로 존재, 아직 학습되지 않음 |
 | CERPT multimodal target | text backbone에 vision encoder와 temporal video encoder를 adapter로 연결 | 입력 bridge 구현, 학습·평가 미완료 |
 
-3B 설정은 다음과 같이 약 3.12B parameter로 계산됩니다.
+3B 설정은 실제 Llama/GQA weight shape 기준 `3,020,101,641` parameters, FP16 weight 약 `5.63 GiB`로 계산됩니다.
 
 ```powershell
 python scripts/estimate_causal_params.py --config configs/cerpt-causal-3b.json
 ```
 
-이는 “3B 모델을 이미 만들었다”는 뜻이 아닙니다. 3B pretraining에는 optimizer state, gradient, activation, checkpoint 저장 공간이 추가로 필요하며, 현재 구현에는 KV cache·FlashAttention·FSDP/DeepSpeed·vLLM backend가 없습니다.
+이는 “3B 모델을 이미 학습했다”는 뜻이 아닙니다. 3B 학습에는 optimizer state, gradient, activation, checkpoint 저장 공간이 추가로 필요하며, 현재 저장소에는 FlashAttention·FSDP/DeepSpeed·vLLM 등록 경로가 없습니다.
+
+CPU-only 로컬 PC 대신 무료 GPU 크레딧으로 시작하려면 [Lightning AI 3B 학습 가이드](docs/guides/LIGHTNING_3B_TRAINING.md)를 사용합니다. Google Colab에서는 [Colab 3B 실행 노트북](notebooks/CERPT_3B_Colab_Training.ipynb)이 Drive 마운트, 데이터 업로드·통합, tokenizer, 30 epoch 자동 재개, 최종 저장과 선택적 Hub 업로드를 순서대로 수행합니다. 클라우드 학습기는 FP16 parameter·Adafactor·gradient checkpointing을 사용하고 100 optimizer step마다 상태를 저장하며, 같은 명령을 다시 실행하면 최신 checkpoint에서 이어갑니다. 무료 크레딧 한 번으로 30 epoch 완료가 보장된다는 뜻은 아닙니다.
 
 ## 학습 전략
 
@@ -124,7 +124,7 @@ task adapter, NPC persona/memory, serving optimization
 - **Verifier training**: 맞는 trace와 틀린 trace, counterexample, contradiction, rollback 사례
 - **Multimodal alignment**: 이미지·비디오 입력과 설명·질문·근거·행동의 대응 데이터
 
-따라서 현재의 11,000개 한국어 산수·채팅 데이터는 파이프라인과 작은 실험을 검증하는 용도이지, 범용 지식을 습득하기 위한 pretraining corpus가 아닙니다.
+새 학습 후보는 현재 11,000개 데이터에 `songys/Chatbot_data` 11,876쌍과 로컬 오피스 대화 ZIP 46,414쌍을 더한 약 69,290쌍입니다(중복 제거 전). Chatbot_data는 일상·이별·사랑 분포가 명시된 인공 데이터이고, 오피스 데이터는 daily/email/schedule/meeting 도메인입니다. 이 정도면 한국어 대화 특화 실험에는 의미가 있지만 범용 3B pretraining corpus로는 작고 편향되어 있습니다. 로컬 오피스 ZIP은 재배포 전에 출처·라이선스를 별도로 확정해야 합니다.
 
 ## 지금까지 확인된 사실
 
@@ -133,13 +133,16 @@ task adapter, NPC persona/memory, serving optimization
 | 항목 | 결과 |
 |---|---|
 | 한국어 데이터 | 11,000 records; train 8,803 / validation 1,098 / test 1,099인 `korean_basic_v6` 사용 |
+| 새 3-source 학습셋 | 완전 중복 7,142쌍 제거 후 62,095쌍; train 49,673 / validation 6,207 / test 6,215 |
+| 새 tokenizer | 실제 train split에서 base 32,672 + workspace 96 = 최종 vocabulary 32,768 확인 |
 | 데이터 감사 | schema 오류 0, duplicate ID 0, split 간 입력 중복 0, 산수 검증 8,000/8,000 |
-| causal base | hidden 64, decoder 1 layer, 10 epochs, validation loss 1.6539 |
-| Korean SFT | chat subset 5 epochs, validation loss 0.1099 |
+| causal base | hidden 64, decoder 1 layer, 10 epochs, 기록된 validation loss 1.6539; future leakage 때문에 성능 지표로 무효 |
+| Korean SFT | chat subset 5 epochs, 기록된 validation loss 0.1099; future leakage 때문에 성능 지표로 무효 |
+| 새 구조 인과성 | 통과: suffix 변경 시 prefix logits 일치, masked padding 불변, KV cache와 full-prefix next-token logits 일치 |
 | 산수 동작 | deterministic verifier를 통해 `37 - 8`, `× 4` → `116` 확인 |
 | 자연어 대화 | intent 혼합과 반복이 남아 있음; 범용 대화 성능으로 해석하면 안 됨 |
 | multimodal | encoder bridge는 있으나 현재 text checkpoint가 이미지·비디오 QA를 학습한 것은 아님 |
-| serving | Hugging Face save/load와 greedy generation은 가능; 일반 vLLM/Ollama 호환은 아직 아님 |
+| serving | Hugging Face save/load와 KV cache generation은 가능; vLLM registration/package와 GGUF 변환이 없어 일반 vLLM/Ollama 호환은 아직 아님 |
 
 검증 명령:
 
@@ -190,11 +193,11 @@ vision encoder는 모델에 연결되는 입력 구성요소이고, video encode
 
 ## 실행
 
-현재 causal checkpoint를 대화형으로 확인하려면:
+새 구조로 다시 학습한 causal checkpoint를 대화형으로 확인하려면:
 
 ```powershell
 python scripts/chat_causal.py `
-  --model-dir artifacts/cerpt-causal-korean-v6-sft `
+  --model-dir artifacts/cerpt-causal-korean-v7-sft `
   --question "37에서 8을 빼고 4를 곱하면 얼마야?"
 ```
 
@@ -205,7 +208,7 @@ chmod +x scripts/train_mac.command
 ./scripts/train_mac.command
 ```
 
-`1`은 한국어 chat SFT, `2`는 3B target pretraining 설정을 사용합니다. 3B 옵션은 실제 메모리와 tokenizer를 확인한 뒤 실행해야 하며, 현재 Mac M4 Pro 256GB에서 가능한지와 실제 소요 시간은 sequence length, batch, gradient accumulation, MPS kernel에 따라 측정해야 합니다.
+`1`은 `--resume-from`으로 새 구조의 base checkpoint를 명시한 한국어 chat SFT, `2`는 3B target 학습 설정을 사용합니다. 수정 전 v5/v6 checkpoint는 재사용하지 않습니다. 3B 옵션은 실제 메모리와 tokenizer를 확인한 뒤 실행해야 하며, 현재 Mac M4 Pro 256GB에서 가능한지와 실제 소요 시간은 sequence length, batch, gradient accumulation, MPS kernel에 따라 측정해야 합니다.
 
 ## 저장소 문서
 
@@ -228,8 +231,8 @@ chmod +x scripts/train_mac.command
 
 - GitHub: [dkekzhs/cerpt-model](https://github.com/dkekzhs/cerpt-model)
 - 공개 개발 브랜치: [mac-mps-sft](https://github.com/dkekzhs/cerpt-model/tree/mac-mps-sft)
-- Causal Korean base: [qweqwqw113/cerpt-causal-korean-v5-10](https://huggingface.co/qweqwqw113/cerpt-causal-korean-v5-10)
-- Korean SFT: [qweqwqw113/cerpt-causal-korean-v6-sft](https://huggingface.co/qweqwqw113/cerpt-causal-korean-v6-sft)
+- Causal Korean base, deprecated leakage checkpoint: [qweqwqw113/cerpt-causal-korean-v5-10](https://huggingface.co/qweqwqw113/cerpt-causal-korean-v5-10)
+- Korean SFT, deprecated leakage checkpoint: [qweqwqw113/cerpt-causal-korean-v6-sft](https://huggingface.co/qweqwqw113/cerpt-causal-korean-v6-sft)
 
 ## DeepSeek-V4와의 관계
 

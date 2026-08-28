@@ -4,6 +4,7 @@ import argparse
 import json
 import random
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -12,13 +13,34 @@ from transformers import PreTrainedTokenizerFast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from cerpt.data.causal import CausalBatchFormatter, ConversationRow, add_workspace_tokens
 from cerpt.data.synthetic import OPERATORS
 from cerpt.data.tokenizer import build_tokenizer
 from cerpt.models.cerpt_causal import CERPTCausalConfig, CERPTForCausalLM
 from cerpt.utils.device import autocast_context, select_device
 
 
-class JsonlDataset(Dataset):
+class TrainingRow(ConversationRow, total=False):
+    cycle_valid_labels: list[int]
+    operator_labels: list[int]
+
+
+@dataclass(frozen=True, slots=True)
+class MissingTrainingLossError(RuntimeError):
+    def __str__(self) -> str:
+        return "causal model did not return a training loss"
+
+
+@dataclass(frozen=True, slots=True)
+class TokenizerVocabularyMismatchError(ValueError):
+    expected: int
+    actual: int
+
+    def __str__(self) -> str:
+        return f"architecture expects vocab_size={self.expected}, but tokenizer has {self.actual} tokens"
+
+
+class JsonlDataset(Dataset[TrainingRow]):
     def __init__(self, path: Path):
         with path.open(encoding="utf-8") as handle:
             self.rows = [json.loads(line) for line in handle if line.strip()]
@@ -26,7 +48,7 @@ class JsonlDataset(Dataset):
     def __len__(self) -> int:
         return len(self.rows)
 
-    def __getitem__(self, index: int) -> dict:
+    def __getitem__(self, index: int) -> TrainingRow:
         return self.rows[index]
 
 
@@ -37,17 +59,23 @@ def seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def make_collator(tokenizer, max_length: int):
-    def collate(rows: list[dict]) -> dict[str, torch.Tensor]:
-        texts = [f"{row['input_text']}\n{row['target_text']} [EOS]" for row in rows]
-        encoded = tokenizer(texts, padding=True, truncation=True, max_length=max_length, return_tensors="pt")
-        labels = encoded["input_ids"].clone().masked_fill(encoded["attention_mask"].eq(0), -100)
+def _fit_cycle_labels(values: list[int], num_cycles: int, fill: int) -> list[int]:
+    return (values + [fill] * num_cycles)[:num_cycles]
+
+
+def make_collator(formatter: CausalBatchFormatter, num_cycles: int):
+    def collate(rows: list[TrainingRow]) -> dict[str, torch.Tensor]:
+        encoded = formatter.collate(rows)
         return {
-            "input_ids": encoded["input_ids"],
-            "attention_mask": encoded["attention_mask"],
-            "labels": labels,
-            "cycle_valid_labels": torch.tensor([row["cycle_valid_labels"] for row in rows], dtype=torch.float32),
-            "operator_labels": torch.tensor([row["operator_labels"] for row in rows], dtype=torch.long),
+            **encoded,
+            "cycle_valid_labels": torch.tensor(
+                [_fit_cycle_labels(row.get("cycle_valid_labels", []), num_cycles, -100) for row in rows],
+                dtype=torch.float32,
+            ),
+            "operator_labels": torch.tensor(
+                [_fit_cycle_labels(row.get("operator_labels", []), num_cycles, -100) for row in rows],
+                dtype=torch.long,
+            ),
         }
 
     return collate
@@ -64,7 +92,7 @@ def run_epoch(model, loader, optimizer, device, train: bool, precision: str, gra
         with torch.set_grad_enabled(train), autocast_context(device, precision):
             output = model(**batch)
             if output.loss is None:
-                raise RuntimeError("causal model did not return a loss")
+                raise MissingTrainingLossError
             if train:
                 (output.loss / gradient_accumulation_steps).backward()
                 if (step + 1) % gradient_accumulation_steps == 0 or step + 1 == len(loader):
@@ -78,7 +106,7 @@ def run_epoch(model, loader, optimizer, device, train: bool, precision: str, gra
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train a from-scratch decoder-only CERPT Base scaffold")
+    parser = argparse.ArgumentParser(description="Train a from-scratch causal CERPT conversation model")
     parser.add_argument("--data-dir", default="data/korean_basic_v2")
     parser.add_argument("--output-dir", default="artifacts/cerpt-causal-korean-base")
     parser.add_argument("--architecture-config", default=None, help="JSON architecture preset such as configs/cerpt-causal-3b.json")
@@ -107,16 +135,21 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     train_set = JsonlDataset(data_dir / "train.jsonl")
     valid_set = JsonlDataset(data_dir / "validation.jsonl")
+    workspace_slots = int(architecture.get("workspace_slots", args.workspace_slots))
+    num_cycles = int(architecture.get("num_cycles", args.cycles))
+    attention_heads = int(architecture.get("num_attention_heads", args.num_heads))
     if args.tokenizer_dir:
         tokenizer = PreTrainedTokenizerFast.from_pretrained(args.tokenizer_dir)
     else:
-        texts = [f"{row['input_text']}\n{row['target_text']} [EOS]" for row in train_set.rows]
+        texts = [f"{row['input_text']}\n{row['target_text']}" for row in train_set.rows]
         tokenizer = build_tokenizer(texts)
+    workspace_token_ids = add_workspace_tokens(tokenizer, num_cycles, workspace_slots)
     if architecture.get("vocab_size") is not None and len(tokenizer) != int(architecture["vocab_size"]):
-        raise ValueError(f"architecture expects vocab_size={architecture['vocab_size']}, but tokenizer has {len(tokenizer)} tokens")
+        raise TokenizerVocabularyMismatchError(int(architecture["vocab_size"]), len(tokenizer))
     tokenizer.save_pretrained(output_dir / "tokenizer")
     max_length = int(architecture.get("max_position_embeddings", args.max_length))
-    collator = make_collator(tokenizer, max_length)
+    formatter = CausalBatchFormatter(tokenizer, tuple(workspace_token_ids), max_length)
+    collator = make_collator(formatter, num_cycles)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collator)
     valid_loader = DataLoader(valid_set, batch_size=args.batch_size, shuffle=False, collate_fn=collator)
 
@@ -124,12 +157,21 @@ def main() -> None:
         vocab_size=len(tokenizer),
         hidden_size=int(architecture.get("hidden_size", args.hidden_size)),
         num_hidden_layers=int(architecture.get("num_hidden_layers", args.num_layers)),
-        num_attention_heads=int(architecture.get("num_attention_heads", args.num_heads)),
+        num_attention_heads=attention_heads,
+        num_key_value_heads=int(architecture.get("num_key_value_heads", attention_heads)),
         intermediate_size=architecture.get("intermediate_size", args.intermediate_size),
         max_position_embeddings=max_length,
-        workspace_slots=int(architecture.get("workspace_slots", args.workspace_slots)),
-        num_cycles=int(architecture.get("num_cycles", args.cycles)),
+        workspace_slots=workspace_slots,
+        num_cycles=num_cycles,
         num_operators=int(architecture.get("num_operators", len(OPERATORS))),
+        workspace_token_ids=workspace_token_ids,
+        pad_token_id=tokenizer.pad_token_id,
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        hidden_act=str(architecture.get("hidden_act", "silu")),
+        rms_norm_eps=float(architecture.get("rms_norm_eps", 1e-6)),
+        tie_word_embeddings=bool(architecture.get("tie_word_embeddings", False)),
+        use_cache=bool(architecture.get("use_cache", True)),
     )
     model = CERPTForCausalLM(config)
     if args.gradient_checkpointing:
