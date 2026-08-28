@@ -15,9 +15,9 @@ SFT를 추가하려면 [SFT 가이드](guides/SFT.md)를 참고한다.
 
 Mac에서 더블클릭으로 학습하려면 [Apple Silicon 학습 가이드](guides/MAC_TRAINING.md)를 참고한다.
 
-CPU-only PC 대신 무료 GPU 크레딧에서 3B 학습을 시작하고 중단 뒤 재개하려면 [Lightning AI 3B 학습 가이드](guides/LIGHTNING_3B_TRAINING.md)를 참고한다.
+CPU-only PC 대신 무료 GPU 크레딧에서 1B 학습을 시작하고 중단 뒤 재개하려면 [Lightning AI 1B 학습 가이드](guides/LIGHTNING_1B_TRAINING.md)를 참고한다.
 
-Google Colab에서 데이터 업로드부터 Drive checkpoint 재개와 최종 모델 저장까지 셀 순서대로 실행하려면 [Colab 3B 학습 가이드](guides/COLAB_3B_TRAINING.md)와 [실행 노트북](../notebooks/CERPT_3B_Colab_Training.ipynb)을 사용한다.
+Google Colab에서 데이터 업로드부터 Drive checkpoint 재개와 최종 모델 저장까지 셀 순서대로 실행하려면 [Colab 1B 학습 가이드](guides/COLAB_1B_TRAINING.md)와 [실행 노트북](../notebooks/CERPT_1B_Colab_Training.ipynb)을 사용한다.
 
 가장 최근의 코드·문서·serving 판정은 [2026-08-27 현재 상태 감사](progress/PROGRESS_2026-08-27_CURRENT_AUDIT.md)에서 확인할 수 있다. 데이터 자체의 상세 감사는 [2026-07-29 데이터 감사 기록](progress/PROGRESS_2026-07-29_DATA_AUDIT.md)에 있다.
 

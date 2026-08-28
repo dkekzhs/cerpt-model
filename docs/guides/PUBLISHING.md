@@ -63,7 +63,7 @@ python scripts/upload_model.py `
   --kind causal
 ```
 
-Lightning 3B 경로는 일반 checkpoint와 달리 `TRAINING_COMPLETE`를 먼저 확인한다. 데이터 준비·30 epoch 자동 재개·완료 후 업로드 명령은 [Lightning AI 3B 학습 가이드](LIGHTNING_3B_TRAINING.md)에 있다. 완료 marker가 없는 `checkpoint-*`나 수정 전 v5/v6 weight를 새 3B 모델로 공개하지 않는다.
+Lightning 1B 경로는 일반 checkpoint와 달리 `TRAINING_COMPLETE`를 먼저 확인한다. 데이터 준비·30 epoch 자동 재개·완료 후 업로드 명령은 [Lightning AI 1B 학습 가이드](LIGHTNING_1B_TRAINING.md)에 있다. 완료 marker가 없는 `checkpoint-*`, 실패한 이전 3B T4 실행, 수정 전 v5/v6 weight를 새 1B 모델로 공개하지 않는다.
 
 현재 causal core는 Hugging Face KV cache와 Llama 계열 parameter layout을 사용한다. 실제 vLLM에서 일반 모델처럼 쓰려면 `cerpt_causal` config 등록·패키징과 continuous batching 검증이 필요하다. Ollama에는 GGUF 변환·양자화와 workspace token prompt template을 추가해야 한다.
 

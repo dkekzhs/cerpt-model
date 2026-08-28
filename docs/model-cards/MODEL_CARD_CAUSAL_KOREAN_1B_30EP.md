@@ -9,19 +9,19 @@ tags:
 - korean
 ---
 
-# CERPT Causal Korean 3B 30-Epoch
+# CERPT Causal Korean 1B 30-Epoch
 
-This is a future release-card template for the high-memory `configs/cerpt-causal-3b.json` preset. The free-T4 launcher was removed because stable AMP requires FP32 parameters and gradients, whose 22.50GiB lower bound already exceeds T4 memory. The source repository does not claim that this model exists.
+This is the release-card template for the checkpoint produced by `scripts/lightning_1b.sh` or the Colab 1B notebook. The source repository does not claim that the model exists until a completed training run produces `TRAINING_COMPLETE`. The cloud uploader refuses to publish without that marker.
 
 ## Architecture
 
 - decoder: Llama-compatible causal decoder
-- parameters: 3,020,101,641
-- hidden size: 3,072
-- layers: 28
-- query heads / KV heads: 24 / 8
-- FFN: 8,192 with SwiGLU
-- context limit: 4,096
+- parameters: 1,020,366,857
+- hidden size: 2,048
+- layers: 20
+- query heads / KV heads: 16 / 4
+- FFN: 5,504 with SwiGLU
+- context limit: 2,048
 - vocabulary: 32,768, including 96 CERPT workspace tokens
 - auxiliary outputs: six-cycle operator and verifier predictions
 
@@ -33,7 +33,7 @@ The workspace tokens occur after the prompt and before the response. Prompt and 
 - `songys/Chatbot_data` at commit `4cf20d13fc46f5037fd1c531cd566e2dd9f72974` (MIT)
 - a user-provided Korean office-dialogue ZIP described as AI-Hub-derived
 
-Exact duplicate prompt/response pairs are removed before a seeded source/task-stratified 80/10/10 split. The raw and normalized datasets are not uploaded with the model.
+Exact duplicate prompt/response pairs are removed before a seeded source/task-stratified 80/10/10 split. The prepared corpus contains 62,095 pairs: 49,673 train, 6,207 validation, and 6,215 test. The raw and normalized datasets are not uploaded with the model.
 
 The office archive's redistribution and derived-model terms are not established by this repository. A publisher must verify those terms and explicitly acknowledge them before preparing the data. This unresolved source condition is why the aggregate model license is marked `other`.
 
@@ -44,7 +44,7 @@ The office archive's redistribution and derived-model terms are not established 
 - per-device batch: 1
 - gradient accumulation: 32
 - optimizer: Adafactor
-- precision: requires a future distributed or sharded mixed-precision recipe; no T4 launcher is provided
+- precision: FP32 model parameters with FP16 AMP autocast
 - gradient checkpointing: enabled
 - checkpoint interval: 100 optimizer steps
 - automatic resume: latest Hugging Face Trainer `checkpoint-*`
@@ -53,6 +53,6 @@ The published repository should include `TRAINING_COMPLETE` and `trainer_state.j
 
 ## Intended use and limitations
 
-This is a research checkpoint for Korean conversational adaptation and CERPT workspace experiments. Roughly 69k prompt/response pairs repeated for 30 epochs are not sufficient general-language pretraining for a 3B model. Memorization, source imbalance, synthetic phrasing, unsafe answers, and severe topic gaps are expected. It must not be described as unbiased, generally knowledgeable, or production-safe without separate held-out evaluations.
+This is a research checkpoint for Korean conversational adaptation and CERPT workspace experiments. Repeating 62,095 prompt/response pairs for 30 epochs is not sufficient general-language pretraining for a 1B model. Memorization, source imbalance, synthetic phrasing, unsafe answers, and severe topic gaps are expected. It must not be described as unbiased, generally knowledgeable, or production-safe without separate held-out evaluations.
 
 The model is not validated for medical, legal, financial, safety-critical, or autonomous decision-making. vLLM registration and Ollama GGUF conversion remain separate engineering work.

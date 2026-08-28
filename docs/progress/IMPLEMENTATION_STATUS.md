@@ -17,7 +17,7 @@
 | 8. 문서 구조 정리 | 완료 | `docs/research`, `docs/guides`, `docs/data`, `docs/model-cards`, `docs/progress` |
 | 9. 한국어 데이터 품질 감사 | 완료 | `data/korean_basic_v5`, `scripts/audit_korean_basic.py` |
 | 10. Causal 무결성 재설계 | 완료 | Llama core, in-stream workspace token, response-only loss, KV cache, causality/padding/cache tests |
-| 11. 무료 GPU 3B 실행 경로 | 구현·로컬 관통 검증 완료, 실GPU 학습 대기 | 한국어 3-source 62,095쌍 변환, exact 32k BPE, Lightning/Colab T4 profile, Drive notebook, step checkpoint 자동 재개, 완료-marker 업로드 gate |
+| 11. 무료 GPU 1B 실행 경로 | AMP dtype 회귀·로컬 관통 검증 완료, 실GPU peak 측정 대기 | 1.020B/2k preset, 한국어 3-source 62,095쌍 변환, exact 32k BPE, Lightning/Colab T4 profile, Drive notebook, step checkpoint 자동 재개, 완료-marker 업로드 gate |
 
 ## 현재 구현 범위
 

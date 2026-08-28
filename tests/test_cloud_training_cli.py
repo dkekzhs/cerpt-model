@@ -51,19 +51,19 @@ def test_cloud_training_cli_exposes_resumable_lightning_profile() -> None:
     assert "lightning-t4" in result.stdout
 
 
-def test_colab_t4_profile_accepts_the_runtime_reported_memory_floor() -> None:
-    # Given: Colab's T4 runtime reports slightly less than the marketed 16 GB in GiB.
-    profile = CloudProfile.COLAB_T4
+def test_t4_profiles_accept_the_runtime_reported_memory_floor() -> None:
+    # Given: T4 runtimes report slightly less than the marketed 16 GB in GiB.
+    profiles = (CloudProfile.COLAB_T4, CloudProfile.LIGHTNING_T4)
 
-    # When: the Colab profile is resolved.
-    settings = _profile_settings(profile)
+    # When: each free-cloud T4 profile is resolved.
+    settings = [_profile_settings(profile) for profile in profiles]
 
-    # Then: its floor admits a normal T4 while retaining the memory preflight.
-    assert settings.minimum_gpu_memory_gib == 14.5
+    # Then: both floors admit a normal T4 while retaining the memory preflight.
+    assert [setting.minimum_gpu_memory_gib for setting in settings] == [14.5, 14.5]
 
 
-def test_colab_model_is_initialized_directly_in_fp16() -> None:
-    # Given: a tiny architecture using the same FP16 construction path as Colab 3B.
+def test_colab_amp_keeps_model_parameters_in_fp32_for_gradient_unscaling() -> None:
+    # Given: a tiny architecture using the same AMP construction path as Colab T4.
     tokenizer = build_tokenizer(["질문", "대답"])
     preset = ArchitecturePreset(
         vocab_size=len(tokenizer) + 4,
@@ -80,10 +80,12 @@ def test_colab_model_is_initialized_directly_in_fp16() -> None:
     original_dtype = torch.get_default_dtype()
 
     # When: the model is created with Colab profile settings.
-    model = _create_model(preset, tokenizer, _profile_settings(CloudProfile.COLAB_T4))
+    settings = _profile_settings(CloudProfile.COLAB_T4)
+    model = _create_model(preset, tokenizer, settings)
 
-    # Then: no FP32 parameter copy remains and the process default is restored.
-    assert {parameter.dtype for parameter in model.parameters()} == {torch.float16}
+    # Then: GradScaler receives FP32 gradients while forward/backward still use FP16 autocast.
+    assert settings.fp16 is True
+    assert {parameter.dtype for parameter in model.parameters()} == {torch.float32}
     assert torch.get_default_dtype() == original_dtype
 
 
@@ -118,7 +120,7 @@ def test_cloud_training_uses_fractional_warmup_steps_for_transformers_five(tmp_p
 
 def test_lightning_launcher_dispatches_prepare_train_and_upload() -> None:
     # Given: the one-command Lightning launcher.
-    launcher = ROOT / "scripts" / "lightning_3b.sh"
+    launcher = ROOT / "scripts" / "lightning_1b.sh"
 
     # When: its machine-consumed command dispatch is inspected.
     content = launcher.read_text(encoding="utf-8")
@@ -141,7 +143,7 @@ def test_lightning_launcher_reports_not_started_before_first_checkpoint(tmp_path
 
     # When: status is requested before the first training run.
     result = subprocess.run(
-        [str(bash), (ROOT / "scripts" / "lightning_3b.sh").as_posix(), "status"],
+        [str(bash), (ROOT / "scripts" / "lightning_1b.sh").as_posix(), "status"],
         cwd=ROOT,
         env=env,
         capture_output=True,

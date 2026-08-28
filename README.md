@@ -83,7 +83,8 @@ CERPT의 목적은 “workspace를 넣으면 자동으로 더 똑똑해진다”
 | Legacy CERPT PoC | `CERPTForConditionalGeneration` 기반 encoder–decoder synthetic-task 구조 | 구조 실험용, 범용 LLM 아님 |
 | CERPT causal base | Llama 계열 decoder + causal workspace tokens + inspectable heads | 새 학습용 현재 주력 구조 |
 | 기존 CERPT Korean SFT | 누수 구조로 학습한 소형 checkpoint | 폐기 대상; 새 구조와 호환되지 않음 |
-| CERPT 3B target | hidden 3072, 28 layers, 24 query / 8 KV heads, FFN 8192, vocab 32768, context 4096 | 설정과 재개 가능한 Lightning 학습 경로 존재, 아직 학습되지 않음 |
+| CERPT 1B T4 | hidden 2048, 20 layers, 16 query / 4 KV heads, FFN 5504, vocab 32768, context 2048 | 무료 T4용 30 epoch Colab/Lightning 경로, 아직 학습되지 않음 |
+| CERPT 3B target | hidden 3072, 28 layers, 24 query / 8 KV heads, FFN 8192, vocab 32768, context 4096 | 설정만 존재; 정상 AMP full training은 T4 메모리를 초과함 |
 | CERPT multimodal target | text backbone에 vision encoder와 temporal video encoder를 adapter로 연결 | 입력 bridge 구현, 학습·평가 미완료 |
 
 3B 설정은 실제 Llama/GQA weight shape 기준 `3,020,101,641` parameters, FP16 weight 약 `5.63 GiB`로 계산됩니다.
@@ -94,7 +95,9 @@ python scripts/estimate_causal_params.py --config configs/cerpt-causal-3b.json
 
 이는 “3B 모델을 이미 학습했다”는 뜻이 아닙니다. 3B 학습에는 optimizer state, gradient, activation, checkpoint 저장 공간이 추가로 필요하며, 현재 저장소에는 FlashAttention·FSDP/DeepSpeed·vLLM 등록 경로가 없습니다.
 
-CPU-only 로컬 PC 대신 무료 GPU 크레딧으로 시작하려면 [Lightning AI 3B 학습 가이드](docs/guides/LIGHTNING_3B_TRAINING.md)를 사용합니다. Google Colab에서는 [Colab 3B 실행 노트북](notebooks/CERPT_3B_Colab_Training.ipynb)이 Drive 마운트, 데이터 업로드·통합, tokenizer, 30 epoch 자동 재개, 최종 저장과 선택적 Hub 업로드를 순서대로 수행합니다. 클라우드 학습기는 FP16 parameter·Adafactor·gradient checkpointing을 사용하고 100 optimizer step마다 상태를 저장하며, 같은 명령을 다시 실행하면 최신 checkpoint에서 이어갑니다. 무료 크레딧 한 번으로 30 epoch 완료가 보장된다는 뜻은 아닙니다.
+무료 T4 경로는 별도 [1B preset](configs/cerpt-causal-1b.json)의 `1,020,366,857` parameters와 2,048 context를 사용합니다. 파라미터와 gradient는 FP32로 유지하고 연산은 Transformers AMP의 FP16 autocast로 수행해 GradScaler 오류를 피합니다. FP32 weight와 gradient의 이론적 하한은 약 `7.60 GiB`이며 나머지 메모리를 Adafactor state, checkpointed activation, CUDA 작업 공간에 남깁니다.
+
+CPU-only 로컬 PC 대신 무료 GPU 크레딧으로 시작하려면 [Lightning AI 1B 학습 가이드](docs/guides/LIGHTNING_1B_TRAINING.md)를 사용합니다. Google Colab에서는 [Colab 1B 실행 노트북](notebooks/CERPT_1B_Colab_Training.ipynb)이 Drive 마운트, 데이터 업로드·통합, tokenizer, 30 epoch 자동 재개, 최종 저장과 선택적 Hub 업로드를 순서대로 수행합니다. 클라우드 학습기는 Adafactor와 gradient checkpointing을 사용하고 100 optimizer step마다 상태를 저장하며, 같은 명령을 다시 실행하면 최신 checkpoint에서 이어갑니다. 무료 크레딧 한 번으로 30 epoch 완료가 보장된다는 뜻은 아닙니다.
 
 ## 학습 전략
 

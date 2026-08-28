@@ -20,7 +20,7 @@ class NotebookDocument(TypedDict):
 
 
 def load_notebook() -> NotebookDocument:
-    path = ROOT / "notebooks" / "CERPT_3B_Colab_Training.ipynb"
+    path = ROOT / "notebooks" / "CERPT_1B_Colab_Training.ipynb"
     return NotebookDocument(**json.loads(path.read_text(encoding="utf-8")))
 
 
@@ -51,6 +51,8 @@ def test_colab_notebook_covers_data_training_resume_and_storage() -> None:
     assert "train_korean_tokenizer.py" in code
     assert "train_causal_cloud.py" in code
     assert '"colab-t4"' in code
+    assert '"configs/cerpt-causal-1b.json"' in code
+    assert "cerpt-causal-korean-v7-1b-30ep" in code
     assert "TRAINING_COMPLETE" in code
     assert '"hf", "upload"' in code
 
@@ -61,8 +63,10 @@ def test_colab_notebook_checks_out_main_and_fails_fast_when_checkout_is_stale() 
 
     # When: the checkout cell is inspected as executable Python.
     code = notebook_code(notebook)
+    cell_ids = [cell["id"] for cell in notebook["cells"]]
 
     # Then: it selects the published branch and validates every required entry point.
+    assert cell_ids.index("drive-and-settings") < cell_ids.index("clone-or-update-repo")
     assert 'REPO_BRANCH = "main"' in code
     assert '"fetch", "origin", REPO_BRANCH' in code
     assert '"switch", REPO_BRANCH' in code

@@ -1,0 +1,26 @@
+{
+  "model_type": "cerpt_causal",
+  "vocab_size": 32768,
+  "hidden_size": 2048,
+  "num_hidden_layers": 20,
+  "num_attention_heads": 16,
+  "num_key_value_heads": 4,
+  "intermediate_size": 5504,
+  "max_position_embeddings": 2048,
+  "workspace_slots": 16,
+  "num_cycles": 6,
+  "num_operators": 8,
+  "hidden_act": "silu",
+  "rms_norm_eps": 1e-6,
+  "tie_word_embeddings": false,
+  "use_cache": true,
+  "parameter_target": "approximately 1.02B with untied input/output embeddings",
+  "requires": [
+    "a real 32k multilingual/Korean tokenizer",
+    "FP32 model parameters with FP16 autocast training",
+    "96 reserved CERPT workspace tokens inside the 32k vocabulary",
+    "activation checkpointing",
+    "Adafactor optimizer state",
+    "a serving prompt template that appends the workspace tokens"
+  ]
+}

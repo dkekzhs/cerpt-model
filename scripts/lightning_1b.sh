@@ -11,14 +11,14 @@ CLOUD_ROOT="${CERPT_CLOUD_ROOT:-$DEFAULT_CLOUD_ROOT}"
 RAW_DIR="$CLOUD_ROOT/raw"
 DATA_DIR="$CLOUD_ROOT/data/korean_conversations_v7"
 TOKENIZER_DIR="$CLOUD_ROOT/tokenizers/cerpt-korean-32k"
-MODEL_DIR="$CLOUD_ROOT/models/cerpt-causal-korean-v7-3b-30ep"
+MODEL_DIR="$CLOUD_ROOT/models/cerpt-causal-korean-v7-1b-30ep"
 SONGYS_SHA=4cf20d13fc46f5037fd1c531cd566e2dd9f72974
 
 cd "$ROOT"
 
 case "${1:-}" in
   prepare)
-    OFFICE_ZIP="${2:?usage: lightning_3b.sh prepare /path/to/office.zip}"
+    OFFICE_ZIP="${2:?usage: lightning_1b.sh prepare /path/to/office.zip}"
     if [[ "${CERPT_ACK_OFFICE_LICENSE:-0}" != "1" ]]; then
       echo "Set CERPT_ACK_OFFICE_LICENSE=1 only after confirming the office archive's training and model-release terms." >&2
       exit 64
@@ -44,7 +44,7 @@ case "${1:-}" in
       --data-dir "$DATA_DIR" \
       --tokenizer-dir "$TOKENIZER_DIR" \
       --output-dir "$MODEL_DIR" \
-      --architecture-config configs/cerpt-causal-3b.json \
+      --architecture-config configs/cerpt-causal-1b.json \
       --profile lightning-t4 \
       --epochs 30 \
       --batch-size 1 \
@@ -54,11 +54,11 @@ case "${1:-}" in
   upload)
     test -n "${HF_TOKEN:-}"
     test -f "$MODEL_DIR/TRAINING_COMPLETE"
-    HF_REPO_ID="${HF_REPO_ID:-qweqwqw113/cerpt-causal-korean-v7-3b-30ep}"
+    HF_REPO_ID="${HF_REPO_ID:-qweqwqw113/cerpt-causal-korean-v7-1b-30ep}"
     uv run --locked --project . hf upload "$HF_REPO_ID" "$MODEL_DIR/final" . --repo-type model
     uv run --locked --project . hf upload \
       "$HF_REPO_ID" \
-      docs/model-cards/MODEL_CARD_CAUSAL_KOREAN_3B_30EP.md \
+      docs/model-cards/MODEL_CARD_CAUSAL_KOREAN_1B_30EP.md \
       README.md \
       --repo-type model
     uv run --locked --project . hf upload \
@@ -81,7 +81,7 @@ case "${1:-}" in
     fi
     ;;
   *)
-    echo "usage: lightning_3b.sh {prepare OFFICE_ZIP|train|upload|status}" >&2
+    echo "usage: lightning_1b.sh {prepare OFFICE_ZIP|train|upload|status}" >&2
     exit 64
     ;;
 esac

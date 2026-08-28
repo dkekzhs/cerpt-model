@@ -42,3 +42,17 @@ def test_three_billion_preset_is_really_near_three_billion_parameters():
 
     # Then: the model is a genuine approximately-3B core, not a small model with padded files.
     assert 2_900_000_000 <= parameters <= 3_100_000_000
+
+
+def test_one_billion_t4_preset_leaves_amp_training_headroom():
+    # Given: the production preset intended for a free 14.5 GiB T4 runtime.
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "cerpt-causal-1b.json"
+    architecture = json.loads(config_path.read_text(encoding="utf-8"))
+
+    # When: the exact parameters and unavoidable FP32 weight/gradient memory are calculated.
+    parameters = estimate(architecture)
+    fp32_weight_and_gradient_gib = parameters * 8 / 1024**3
+
+    # Then: it is a real approximately-1B model with room for AMP activations and Adafactor.
+    assert 900_000_000 <= parameters <= 1_100_000_000
+    assert fp32_weight_and_gradient_gib < 8.0

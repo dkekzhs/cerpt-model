@@ -54,7 +54,7 @@ class ArchitecturePreset(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class ProfileSettings:
-    dtype: torch.dtype
+    parameter_dtype: torch.dtype
     fp16: bool
     gradient_checkpointing: bool
     optimizer: str
@@ -106,9 +106,9 @@ class TokenizerArchitectureMismatchError(ValueError):
 def _profile_settings(profile: CloudProfile) -> ProfileSettings:
     match profile:
         case CloudProfile.COLAB_T4:
-            return ProfileSettings(torch.float16, True, True, "adafactor", 14.5)
+            return ProfileSettings(torch.float32, True, True, "adafactor", 14.5)
         case CloudProfile.LIGHTNING_T4:
-            return ProfileSettings(torch.float16, True, True, "adafactor", 15.0)
+            return ProfileSettings(torch.float32, True, True, "adafactor", 14.5)
         case CloudProfile.CPU_SMOKE:
             return ProfileSettings(torch.float32, False, False, "adamw_torch", 0.0)
         case unreachable:
@@ -136,7 +136,7 @@ def _create_model(
 ) -> CERPTForCausalLM:
     workspace_token_ids = add_workspace_tokens(tokenizer, preset.num_cycles, preset.workspace_slots)
     original_dtype = torch.get_default_dtype()
-    torch.set_default_dtype(settings.dtype)
+    torch.set_default_dtype(settings.parameter_dtype)
     try:
         config = CERPTCausalConfig(
             vocab_size=len(tokenizer),
@@ -206,8 +206,8 @@ def _parse_request() -> CloudTrainingRequest:
     parser = argparse.ArgumentParser(description="Run resumable causal CERPT training on free cloud GPUs")
     parser.add_argument("--data-dir", type=Path, default=Path("data/korean_conversations_v7"))
     parser.add_argument("--tokenizer-dir", type=Path, default=Path("artifacts/tokenizers/cerpt-korean-32k"))
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/cerpt-causal-korean-v7-3b"))
-    parser.add_argument("--architecture-config", type=Path, default=Path("configs/cerpt-causal-3b.json"))
+    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/cerpt-causal-korean-v7-1b"))
+    parser.add_argument("--architecture-config", type=Path, default=Path("configs/cerpt-causal-1b.json"))
     parser.add_argument("--profile", type=CloudProfile, choices=list(CloudProfile), default=CloudProfile.LIGHTNING_T4)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=1)
@@ -246,7 +246,7 @@ def main() -> None:
     tokenizer.save_pretrained(request.output_dir / "tokenizer")
     checkpoint = get_last_checkpoint(str(request.output_dir))
     model = (
-        CERPTForCausalLM.from_pretrained(checkpoint, dtype=settings.dtype)
+        CERPTForCausalLM.from_pretrained(checkpoint, dtype=settings.parameter_dtype)
         if checkpoint is not None
         else _create_model(preset, tokenizer, settings)
     )

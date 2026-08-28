@@ -61,6 +61,12 @@ workspace는 별도 full-sequence tensor를 만들지 않는다. 각각의 works
 - prompt와 workspace에는 LM loss를 주지 않고 response만 학습한다.
 - 긴 prompt는 앞부분을 버리되 모든 workspace token을 보존한다.
 
+## 무료 T4용 1B preset
+
+[configs/cerpt-causal-1b.json](../../configs/cerpt-causal-1b.json)은 hidden 2,048, 20 layers, 16 query / 4 KV heads, SwiGLU 5,504, context 2,048로 정확히 1,020,366,857 parameters다. T4 profile은 모델 파라미터와 gradient를 FP32로 유지하고 FP16 autocast, Adafactor, gradient checkpointing, batch 1을 사용한다. FP32 weight와 gradient만 약 7.60GiB다. 이 경로는 [Colab 1B 노트북](../../notebooks/CERPT_1B_Colab_Training.ipynb)과 [Lightning 1B 런처](../../scripts/lightning_1b.sh)에 연결되어 있다.
+
+기존 3B 모델을 직접 FP16 파라미터로 만들고 `TrainingArguments(fp16=True)`를 함께 사용한 경로는 GradScaler가 FP16 gradient를 unscale할 수 없어 첫 optimizer step에서 실패했다. 반대로 3B 파라미터를 정상 FP32로 유지하면 weight와 gradient만 약 22.50GiB라 14.5GiB T4에 들어가지 않는다.
+
 ## 3B preset
 
 [configs/cerpt-causal-3b.json](../../configs/cerpt-causal-3b.json)은 다음 구조다.
