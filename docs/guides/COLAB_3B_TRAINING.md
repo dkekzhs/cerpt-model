@@ -19,6 +19,8 @@
 11. 완료되면 `final/`, `trainer_state.json`, `TRAINING_COMPLETE`를 Drive에 저장한다.
 12. 선택적으로 Colab Secret의 `HF_TOKEN`으로 모델 파일을 Hugging Face에 스트리밍 업로드한다.
 
+학습 셀은 자식 Python 프로세스의 stdout과 stderr를 실시간으로 함께 표시하고 같은 내용을 `MODEL_DIR/training.log`에 누적 저장한다. 프로세스가 실패하면 셀 마지막 오류에 최근 80줄과 전체 로그 경로가 함께 나오므로 바깥쪽 `CalledProcessError`만 보고 원인을 추측하지 않아도 된다.
+
 ## 처음 실행할 때 바꿀 값
 
 설정 셀에서 다음 값을 확인한다.
@@ -44,6 +46,7 @@ Drive 기본 저장 위치는 다음과 같다.
 └── models/cerpt-causal-korean-v7-3b-30ep/
     ├── checkpoint-*/
     ├── final/
+    ├── training.log
     ├── trainer_state.json
     └── TRAINING_COMPLETE
 ```
@@ -56,6 +59,7 @@ FP16 3B weight, 최근 checkpoint 한 개, 최종 모델을 동시에 저장하�
 - `최소 14.5 GiB`: 배정된 GPU 메모리가 부족하므로 새 GPU 런타임을 요청한다.
 - `Git checkout에 필수 학습 파일이 없습니다`: 이전 노트북 셀을 사용 중인 상태다. GitHub의 `main` 노트북을 다시 열고 코드 준비 셀부터 실행한다.
 - `unexpected keyword argument 'warmup_ratio'`: dependency 셀을 새 버전으로 다시 실행한다. 이 셀은 `uv` 설치 대상을 `sys.executable`로 고정하고, 학습 전에 transformers 버전·module·signature와 실제 constructor 호출을 검사한다.
+- 학습 프로세스가 non-zero exit code로 종료됨: 오류 마지막에 출력되는 최근 80줄을 먼저 확인한다. 전체 traceback은 Drive의 `MODEL_DIR/training.log`에 남아 있으므로 런타임이 종료된 뒤에도 확인할 수 있다.
 - CUDA OOM: batch가 이미 1이므로 이 3B 설정을 더 줄이지 않는다. L4/A10/A100처럼 24GiB 이상 GPU에서 같은 Drive checkpoint를 사용한다.
 - Drive 용량 부족: 이전의 불필요한 모델 파일을 정리하되 최신 `checkpoint-*`는 재개 전까지 보존한다.
 - 세션 종료: 오류가 아니라 예상 동작이다. 위에서부터 다시 실행하면 자동 재개한다.

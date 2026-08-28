@@ -81,7 +81,8 @@ def test_colab_notebook_uses_the_active_interpreter_for_every_python_entry_point
     # Then: uv bootstrap and project scripts use the same interpreter environment.
     assert '[sys.executable, "-m", "pip", "install", "-q", "uv"]' in code
     assert 'shutil.which("uv")' in code
-    assert code.count('sys.executable, "scripts/') == 3
+    assert code.count('sys.executable, "scripts/') == 2
+    assert 'sys.executable, "-u", "scripts/train_causal_cloud.py"' in code
     assert '"python", "scripts/' not in code
 
 
@@ -99,3 +100,20 @@ def test_colab_dependency_install_targets_kernel_python_and_probes_training_argu
     assert "warmup_steps=0.03" in code
     assert "warmup_ratio=0.03" not in code
     assert "eval_strategy=" in code
+
+
+def test_colab_training_streams_the_child_traceback_to_a_persistent_log() -> None:
+    # Given: the cloud trainer can fail inside a separate Python process.
+    notebook = load_notebook()
+
+    # When: the resumable training cell is inspected.
+    training_cell = next(cell for cell in notebook["cells"] if cell["id"] == "run-resumable-training")
+    code = "".join(training_cell["source"])
+
+    # Then: stdout and stderr are streamed together and retained on Drive.
+    assert 'TRAINING_LOG = MODEL_DIR / "training.log"' in code
+    assert 'sys.executable, "-u", "scripts/train_causal_cloud.py"' in code
+    assert "subprocess.Popen(" in code
+    assert "stdout=subprocess.PIPE" in code
+    assert "stderr=subprocess.STDOUT" in code
+    assert "training_process.wait()" in code
