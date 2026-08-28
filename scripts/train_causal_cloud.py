@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["accelerate>=1.10", "pydantic>=2.7", "torch>=2.1", "transformers>=5.0"]
+# dependencies = ["accelerate==1.14.0", "pydantic==2.11.4", "torch==2.11.0", "transformers==5.7.0"]
 # ///
 # How to run: uv run --project . python scripts/train_causal_cloud.py --help
 
@@ -183,7 +183,7 @@ def _training_arguments(
         gradient_accumulation_steps=request.gradient_accumulation_steps,
         learning_rate=request.learning_rate,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=0.03,
         optim=settings.optimizer,
         fp16=settings.fp16,
         gradient_checkpointing=settings.gradient_checkpointing,

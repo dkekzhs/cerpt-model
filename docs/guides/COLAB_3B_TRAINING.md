@@ -10,7 +10,7 @@
 2. Google Drive를 마운트하고 영구 저장 경로를 만든다.
 3. 오피스 ZIP이 Drive에 없으면 업로드 창으로 받아 Drive에 저장한다.
 4. GitHub `main`에서 CERPT 코드를 clone하거나 fast-forward update하고, 세 학습 entry point가 실제 checkout에 있는지 확인한다.
-5. Colab에 설치된 CUDA PyTorch는 유지하고 검증된 나머지 의존성만 설치한다.
+5. Colab에 설치된 CUDA PyTorch는 유지하고, 현재 notebook kernel의 Python에 검증된 나머지 의존성을 설치한 뒤 `TrainingArguments`의 실제 module과 signature를 검사한다.
 6. `korean_basic_v6`, 고정 commit의 Songys CSV, 오피스 ZIP을 합치고 중복을 제거한다.
 7. base 32,672개와 workspace 96개가 합쳐져 최종 32,768개가 되는 tokenizer를 만든다.
 8. 3.02B 모델을 처음부터 FP16으로 생성해 Colab 시스템 RAM의 FP32 임시 복사를 피한다.
@@ -55,6 +55,7 @@ FP16 3B weight, 최근 checkpoint 한 개, 최종 모델을 동시에 저장하�
 - `GPU 런타임이 아닙니다`: Colab의 런타임 유형을 GPU로 바꾼다.
 - `최소 14.5 GiB`: 배정된 GPU 메모리가 부족하므로 새 GPU 런타임을 요청한다.
 - `Git checkout에 필수 학습 파일이 없습니다`: 이전 노트북 셀을 사용 중인 상태다. GitHub의 `main` 노트북을 다시 열고 코드 준비 셀부터 실행한다.
+- `unexpected keyword argument 'warmup_ratio'`: dependency 셀을 새 버전으로 다시 실행한다. 이 셀은 `uv` 설치 대상을 `sys.executable`로 고정하고, 학습 전에 transformers 버전·module·signature와 실제 constructor 호출을 검사한다.
 - CUDA OOM: batch가 이미 1이므로 이 3B 설정을 더 줄이지 않는다. L4/A10/A100처럼 24GiB 이상 GPU에서 같은 Drive checkpoint를 사용한다.
 - Drive 용량 부족: 이전의 불필요한 모델 파일을 정리하되 최신 `checkpoint-*`는 재개 전까지 보존한다.
 - 세션 종료: 오류가 아니라 예상 동작이다. 위에서부터 다시 실행하면 자동 재개한다.

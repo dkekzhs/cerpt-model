@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import shutil
@@ -15,8 +16,10 @@ from cerpt.data.tokenizer import build_tokenizer
 from scripts.train_causal_cloud import (
     ArchitecturePreset,
     CloudProfile,
+    CloudTrainingRequest,
     _create_model,
     _profile_settings,
+    _training_arguments,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +85,35 @@ def test_colab_model_is_initialized_directly_in_fp16() -> None:
     # Then: no FP32 parameter copy remains and the process default is restored.
     assert {parameter.dtype for parameter in model.parameters()} == {torch.float16}
     assert torch.get_default_dtype() == original_dtype
+
+
+def test_cloud_training_uses_fractional_warmup_steps_for_transformers_five(tmp_path: Path) -> None:
+    # Given: a cloud request using the pinned Transformers 5 scheduler contract.
+    request = CloudTrainingRequest(
+        data_dir=tmp_path / "data",
+        tokenizer_dir=tmp_path / "tokenizer",
+        output_dir=tmp_path / "model",
+        architecture_config=tmp_path / "architecture.json",
+        profile=CloudProfile.CPU_SMOKE,
+        epochs=30,
+        batch_size=1,
+        gradient_accumulation_steps=32,
+        learning_rate=1e-4,
+        save_steps=100,
+        max_steps=-1,
+        seed=42,
+    )
+
+    # When: TrainingArguments are constructed for 1,000 optimizer steps.
+    arguments = _training_arguments(request, _profile_settings(request.profile))
+    warmup_steps = arguments.get_warmup_steps(1_000)
+    constructor_source = inspect.getsource(_training_arguments)
+
+    # Then: the current warmup_steps API preserves the intended three-percent warmup.
+    assert "warmup_steps=0.03" in constructor_source
+    assert "warmup_ratio" not in constructor_source
+    assert arguments.warmup_steps == pytest.approx(0.03)
+    assert warmup_steps == 30
 
 
 def test_lightning_launcher_dispatches_prepare_train_and_upload() -> None:
