@@ -1,39 +1,46 @@
-# Apple Silicon 원클릭 학습
+# Apple Silicon 1B 학습과 재개
 
-## 준비
+Mac 경로는 Colab과 같은 `configs/cerpt-causal-1b.json`, 한국어 v7 데이터, 32k tokenizer, 30 epoch 설정과 Hugging Face Trainer 체크포인트 형식을 사용한다. 차이는 T4의 CUDA AMP 대신 Apple MPS에서 FP32와 Adafactor를 쓴다는 점이다.
 
-터미널에서 프로젝트 최초 1회만 실행한다.
-
-```bash
-cd /path/to/cerpt-planning
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-`MPS available` 여부를 확인한다.
+## 브랜치와 환경 준비
 
 ```bash
-python -c "import torch; print(torch.backends.mps.is_available())"
+git switch mac-mps-sft
+git pull --ff-only
+uv venv --python 3.12
+uv sync --locked
+.venv/bin/python -c "import torch; print(torch.backends.mps.is_available())"
+chmod +x scripts/train_mac.command
 ```
 
-## 딸깍 실행
+마지막 명령이 `True`여야 한다. MPS를 사용할 수 없으면 CPU로 조용히 전환하지 않고 학습 시작 전에 중단한다.
+
+## Colab 결과 가져오기
+
+Google Drive의 `cerpt-cloud` 폴더를 프로젝트의 `artifacts/cerpt-cloud`로 복사한다. 기본 구조는 다음과 같다.
+
+```text
+artifacts/cerpt-cloud/
+├── data/korean_conversations_v7/
+├── tokenizers/cerpt-korean-32k/
+└── models/cerpt-causal-korean-v7-1b-30ep/
+```
+
+모델 폴더까지 복사하면 Mac이 기존 체크포인트에서 이어서 학습한다. 다른 위치를 쓸 때는 실행 창에서 절대 경로를 입력하면 된다.
+
+## Finder에서 실행
 
 Finder에서 `scripts/train_mac.command`를 더블클릭한다.
 
-- `1`: `--resume-from`으로 지정한 새 causal base checkpoint에 SFT
-- `2`: 3B 사전학습 preset 실행
+- `1`: 1B 한국어 base 학습을 시작하거나 재개한다. 기본값은 위 `artifacts/cerpt-cloud` 구조다.
+- `2`: 완전한 base checkpoint를 직접 지정해 한국어 chat SFT를 실행한다.
 
-3B 모드는 32k tokenizer와 대규모 pretraining shard가 이미 준비되어 있어야 한다. 현재 `data/korean_basic_v6`는 3B 사전학습용 corpus가 아니므로 3B 모드에 사용하지 않는다.
+실행기는 프로젝트의 `.venv/bin/python`만 사용한다. 가상환경이 없으면 설치 명령을 표시하고 중단한다.
 
-## 안전장치
+## 체크포인트 재개 규칙
 
-- MPS를 강제로 선택하고 CUDA/CPU로 조용히 내려가지 않는다.
-- MPS 미지원이면 시작 전에 중단한다.
-- MPS fallback은 지원되지 않는 연산에만 CPU를 사용하도록 설정한다.
-- gradient accumulation과 gradient checkpointing을 켠다.
-- SFT 모드는 새 구조로 처음부터 학습한 base checkpoint를 `--resume-from`으로 반드시 지정한다.
-- 누수 구조로 학습된 v5/v6 checkpoint를 자동 다운로드하거나 이어 학습하지 않는다.
-- 256GB 통합 메모리를 활용해 호환성 우선으로 기본 precision은 fp32다.
+재개 대상은 `checkpoint-숫자` 중 모델 weight, `trainer_state.json`, `optimizer.pt`, `scheduler.pt`가 모두 있는 가장 최신 폴더다. 저장 중 끊겨 `trainer_state.json` 등이 없는 `checkpoint-1800` 같은 폴더는 건드리거나 삭제하지 않고 직전의 완전한 체크포인트를 선택한다.
 
-현재 구현은 Mac에서 MPS 동작을 코드 수준으로 검증했지만, 실제 M4 Pro 하드웨어 테스트는 해당 Mac에서 처음 실행해야 한다.
+동일한 Trainer 형식이므로 Colab에서 Mac으로 옮겨도 model, optimizer, scheduler, global step과 데이터 진행 위치를 이어받는다. CUDA와 MPS의 난수 구현은 다르므로 중단 없이 같은 장치에서 학습한 결과와 비트 단위까지 동일하다고 보장하지는 않는다.
+
+MPS fallback은 MPS 미지원 연산에만 CPU를 사용하도록 켜며, gradient accumulation 32와 gradient checkpointing도 유지한다. 이 경로의 CLI와 CPU 대체 재개 테스트는 검증했지만, 현재 개발 호스트에는 Apple Silicon이 없어 실제 MPS 장시간 학습은 Mac에서 처음 확인해야 한다.

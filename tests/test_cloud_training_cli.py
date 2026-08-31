@@ -89,6 +89,20 @@ def test_colab_amp_keeps_model_parameters_in_fp32_for_gradient_unscaling() -> No
     assert torch.get_default_dtype() == original_dtype
 
 
+def test_mac_mps_profile_uses_fp32_adafactor_checkpointing() -> None:
+    # Given: the shared resumable trainer running on Apple Silicon.
+    profile = CloudProfile("mac-mps")
+
+    # When: the Mac profile is resolved.
+    settings = _profile_settings(profile)
+
+    # Then: MPS uses stable FP32 parameters with the same memory-saving recipe.
+    assert settings.parameter_dtype == torch.float32
+    assert settings.fp16 is False
+    assert settings.optimizer == "adafactor"
+    assert settings.gradient_checkpointing is True
+
+
 def test_cloud_training_uses_fractional_warmup_steps_for_transformers_five(tmp_path: Path) -> None:
     # Given: a cloud request using the pinned Transformers 5 scheduler contract.
     request = CloudTrainingRequest(
@@ -214,12 +228,14 @@ def test_cloud_training_resumes_from_the_latest_step_checkpoint(tmp_path: Path) 
         "1",
     ]
 
-    # When: one step is saved and the same command continues to step two.
+    # When: a newer partial checkpoint exists and the same command continues to step two.
     first = subprocess.run([*base_command, "--max-steps", "1"], cwd=ROOT, capture_output=True, text=True, check=False)
+    assert first.returncode == 0, first.stderr
+    shutil.copytree(output_dir / "checkpoint-1", output_dir / "checkpoint-2")
+    (output_dir / "checkpoint-2" / "trainer_state.json").unlink()
     second = subprocess.run([*base_command, "--max-steps", "2"], cwd=ROOT, capture_output=True, text=True, check=False)
 
-    # Then: the second run reports an exact resume from checkpoint-1.
-    assert first.returncode == 0, first.stderr
+    # Then: the partial checkpoint is skipped and the exact resume uses checkpoint-1.
     assert second.returncode == 0, second.stderr
     completion = json.loads((output_dir / "TRAINING_COMPLETE").read_text(encoding="utf-8"))
     assert completion["global_step"] == 2

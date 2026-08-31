@@ -211,7 +211,7 @@ chmod +x scripts/train_mac.command
 ./scripts/train_mac.command
 ```
 
-`1`은 `--resume-from`으로 새 구조의 base checkpoint를 명시한 한국어 chat SFT, `2`는 3B target 학습 설정을 사용합니다. 수정 전 v5/v6 checkpoint는 재사용하지 않습니다. 3B 옵션은 실제 메모리와 tokenizer를 확인한 뒤 실행해야 하며, 현재 Mac M4 Pro 256GB에서 가능한지와 실제 소요 시간은 sequence length, batch, gradient accumulation, MPS kernel에 따라 측정해야 합니다.
+`1`은 Colab과 같은 1B·한국어 v7·32k tokenizer·30 epoch 설정으로 base 학습을 시작하거나 완전한 최신 체크포인트에서 재개합니다. `2`는 새 구조의 base checkpoint를 지정해 한국어 chat SFT를 실행합니다. 기본 입력·출력은 `artifacts/cerpt-cloud` 아래이며, 자세한 복사 구조와 재개 규칙은 [Mac 학습 가이드](./docs/guides/MAC_TRAINING.md)에 있습니다. 수정 전 v5/v6 checkpoint는 재사용하지 않습니다.
 
 ## 저장소 문서
 

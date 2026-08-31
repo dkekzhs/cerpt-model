@@ -13,7 +13,7 @@ from cerpt.utils.device import select_device
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="One-click Apple Silicon CERPT training launcher")
-    parser.add_argument("--mode", choices=["sft", "3b"], default="sft")
+    parser.add_argument("--mode", choices=["sft", "1b"], default="1b")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--tokenizer-dir", default=None)
     parser.add_argument("--data-dir", default=None)
@@ -40,17 +40,16 @@ def main() -> None:
             "--gradient-accumulation-steps", "4", "--gradient-checkpointing",
         ]
     else:
-        if not args.tokenizer_dir:
-            raise SystemExit("3b mode requires --tokenizer-dir pointing to a real 32k tokenizer")
+        cloud_root = project / "artifacts" / "cerpt-cloud"
         command = [
-            python, str(project / "scripts" / "train_causal.py"),
-            "--architecture-config", str(project / "configs" / "cerpt-causal-3b.json"),
-            "--tokenizer-dir", args.tokenizer_dir,
-            "--data-dir", args.data_dir or str(project / "data" / "pretraining_shards"),
-            "--output-dir", args.output_dir or str(project / "artifacts" / "cerpt-causal-3b-mps"),
-            "--epochs", str(args.epochs or 1), "--batch-size", "1",
-            "--device", "mps", "--precision", "fp32",
-            "--gradient-accumulation-steps", "32", "--gradient-checkpointing",
+            python, str(project / "scripts" / "train_causal_cloud.py"),
+            "--architecture-config", str(project / "configs" / "cerpt-causal-1b.json"),
+            "--profile", "mac-mps",
+            "--tokenizer-dir", args.tokenizer_dir or str(cloud_root / "tokenizers" / "cerpt-korean-32k"),
+            "--data-dir", args.data_dir or str(cloud_root / "data" / "korean_conversations_v7"),
+            "--output-dir", args.output_dir or str(cloud_root / "models" / "cerpt-causal-korean-v7-1b-30ep"),
+            "--epochs", str(args.epochs or 30), "--batch-size", "1",
+            "--gradient-accumulation-steps", "32", "--save-steps", "100",
         ]
     print("Using Apple Silicon device:", device)
     print("Running:", " ".join(command))

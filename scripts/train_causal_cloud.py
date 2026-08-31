@@ -17,7 +17,6 @@ from typing import assert_never
 import torch
 from pydantic import BaseModel, ConfigDict
 from transformers import PreTrainedTokenizerFast, Trainer, TrainingArguments
-from transformers.trainer_utils import get_last_checkpoint
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -25,12 +24,15 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from cerpt.data.causal import CausalBatchFormatter, add_workspace_tokens
 from cerpt.models.cerpt_causal import CERPTCausalConfig, CERPTForCausalLM
+from cerpt.training.checkpoint import latest_resumable_checkpoint
+from cerpt.utils.device import select_device
 from scripts.train_causal import JsonlDataset, make_collator
 
 
 class CloudProfile(StrEnum):
     COLAB_T4 = "colab-t4"
     LIGHTNING_T4 = "lightning-t4"
+    MAC_MPS = "mac-mps"
     CPU_SMOKE = "cpu-smoke"
 
 
@@ -109,6 +111,8 @@ def _profile_settings(profile: CloudProfile) -> ProfileSettings:
             return ProfileSettings(torch.float32, True, True, "adafactor", 14.5)
         case CloudProfile.LIGHTNING_T4:
             return ProfileSettings(torch.float32, True, True, "adafactor", 14.5)
+        case CloudProfile.MAC_MPS:
+            return ProfileSettings(torch.float32, False, True, "adafactor", 0.0)
         case CloudProfile.CPU_SMOKE:
             return ProfileSettings(torch.float32, False, False, "adamw_torch", 0.0)
         case unreachable:
@@ -119,6 +123,8 @@ def _preflight(profile: CloudProfile, settings: ProfileSettings) -> None:
     match profile:
         case CloudProfile.CPU_SMOKE:
             return
+        case CloudProfile.MAC_MPS:
+            select_device("mps")
         case CloudProfile.COLAB_T4 | CloudProfile.LIGHTNING_T4:
             if not torch.cuda.is_available():
                 raise CudaRequiredError(profile)
@@ -170,7 +176,7 @@ def _training_arguments(
     match request.profile:
         case CloudProfile.COLAB_T4:
             save_total_limit = 1
-        case CloudProfile.CPU_SMOKE | CloudProfile.LIGHTNING_T4:
+        case CloudProfile.CPU_SMOKE | CloudProfile.LIGHTNING_T4 | CloudProfile.MAC_MPS:
             save_total_limit = 2
         case unreachable:
             assert_never(unreachable)
@@ -244,7 +250,7 @@ def main() -> None:
         raise TokenizerArchitectureMismatchError(preset.vocab_size, len(tokenizer))
     request.output_dir.mkdir(parents=True, exist_ok=True)
     tokenizer.save_pretrained(request.output_dir / "tokenizer")
-    checkpoint = get_last_checkpoint(str(request.output_dir))
+    checkpoint = latest_resumable_checkpoint(request.output_dir)
     model = (
         CERPTForCausalLM.from_pretrained(checkpoint, dtype=settings.parameter_dtype)
         if checkpoint is not None
