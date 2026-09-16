@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -92,10 +92,9 @@ def save_tokenizer(tokenizer: PreTrainedTokenizerFast, path: str | Path) -> None
     tokenizer.save_pretrained(path)
 
 
-def load_jsonl_texts(path: str | Path) -> list[str]:
-    texts: list[str] = []
+def load_jsonl_texts(path: str | Path) -> Iterator[str]:
     with Path(path).open(encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
-            texts.extend([row["input_text"], row["target_text"]])
-    return texts
+            yield row["input_text"]
+            yield row["target_text"]

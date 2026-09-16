@@ -13,12 +13,18 @@ from cerpt.utils.device import select_device
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="One-click Apple Silicon CERPT training launcher")
-    parser.add_argument("--mode", choices=["sft", "3b"], default="sft")
+    parser.add_argument("--mode", choices=["sft", "3b"], default="3b")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--tokenizer-dir", default=None)
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--resume-from", default=None)
+    parser.add_argument(
+        "--corpus-documents",
+        type=int,
+        default=5_000_000,
+        help="FineWeb2 Korean source documents to stream when data is missing; 0 uses the full corpus",
+    )
     args = parser.parse_args()
     device = select_device("mps")
     project = Path(__file__).resolve().parents[1]
@@ -40,13 +46,39 @@ def main() -> None:
             "--gradient-accumulation-steps", "4", "--gradient-checkpointing",
         ]
     else:
-        if not args.tokenizer_dir:
-            raise SystemExit("3b mode requires --tokenizer-dir pointing to a real 32k tokenizer")
+        data_dir = Path(args.data_dir or project / "data" / "pretraining_shards")
+        tokenizer_dir = Path(args.tokenizer_dir or project / "artifacts" / "tokenizers" / "cerpt-korean-32k")
+        if not data_dir.is_absolute():
+            data_dir = project / data_dir
+        if not tokenizer_dir.is_absolute():
+            tokenizer_dir = project / tokenizer_dir
+        if not all((data_dir / name).is_file() for name in ("train.jsonl", "validation.jsonl", "metadata.json")):
+            prepare_command = [
+                python,
+                str(project / "scripts" / "prepare_korean_pretraining.py"),
+                "--output-dir",
+                str(data_dir),
+                "--max-documents",
+                str(args.corpus_documents),
+            ]
+            print("Korean pretraining data is missing; streaming FineWeb2 kor_Hang.", flush=True)
+            subprocess.run(prepare_command, cwd=project, env=environment, check=True)
+        if not (tokenizer_dir / "tokenizer.json").is_file():
+            tokenizer_command = [
+                python,
+                str(project / "scripts" / "train_korean_tokenizer.py"),
+                "--data-dir",
+                str(data_dir),
+                "--output-dir",
+                str(tokenizer_dir),
+            ]
+            print("Korean 32k tokenizer is missing; training it from the downloaded corpus.", flush=True)
+            subprocess.run(tokenizer_command, cwd=project, env=environment, check=True)
         command = [
             python, str(project / "scripts" / "train_causal.py"),
             "--architecture-config", str(project / "configs" / "cerpt-causal-3b.json"),
-            "--tokenizer-dir", args.tokenizer_dir,
-            "--data-dir", args.data_dir or str(project / "data" / "pretraining_shards"),
+            "--tokenizer-dir", str(tokenizer_dir),
+            "--data-dir", str(data_dir),
             "--output-dir", args.output_dir or str(project / "artifacts" / "cerpt-causal-3b-mps"),
             "--epochs", str(args.epochs or 1), "--batch-size", "1",
             "--device", "mps", "--precision", "fp32",

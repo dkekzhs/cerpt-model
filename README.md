@@ -211,7 +211,7 @@ chmod +x scripts/train_mac.command
 ./scripts/train_mac.command
 ```
 
-`1`은 `--resume-from`으로 새 구조의 base checkpoint를 명시한 한국어 chat SFT, `2`는 3B target 학습 설정을 사용합니다. 수정 전 v5/v6 checkpoint는 재사용하지 않습니다. 3B 옵션은 실제 메모리와 tokenizer를 확인한 뒤 실행해야 하며, 현재 Mac M4 Pro 256GB에서 가능한지와 실제 소요 시간은 sequence length, batch, gradient accumulation, MPS kernel에 따라 측정해야 합니다.
+`1`은 한국어 전용 FineWeb2 `kor_Hang` 데이터를 streaming으로 준비하고 32k tokenizer를 만든 뒤 3B target 학습을 시작합니다. 기본은 500만 원문 문서이며 실행 창에서 `0`을 입력하면 전체 한국어 corpus를 사용합니다. `2`는 `--resume-from`으로 새 구조의 base checkpoint를 명시한 한국어 chat SFT입니다. 수정 전 v5/v6 checkpoint는 재사용하지 않습니다. 3B 옵션은 실제 메모리와 디스크를 확인한 뒤 실행해야 하며, 현재 Mac M4 Pro 256GB에서 가능한지와 실제 소요 시간은 sequence length, batch, gradient accumulation, MPS kernel에 따라 측정해야 합니다.
 
 ## 저장소 문서
 

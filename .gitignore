@@ -10,4 +10,5 @@ data/korean_stage1/raw/
 data/korean_stage1/*.jsonl
 data/korean_stage1/metadata.json
 data/korean_conversations_v7/
+data/pretraining_shards/
 data/raw/
